@@ -13,10 +13,11 @@ oz-marketplace is a new project inspired by `worker-housing-platform` (legacy). 
 | Checkpoint | What you approve | Status |
 |---|---|---|
 | **CP-1** (this doc) | All decisions in §3, scales in §4, architecture in §5, build sequence in §6 | ✅ locked |
-| **CP-2** | Generated `_tokens.scss`, global stylesheet, scaffolded layout | ⏳ awaits Phase 0 |
+| **CP-2** | Generated `_tokens.scss`, global stylesheet, scaffolded layout | ✅ passed |
+| **CP-1.5** | All nine primitives reviewed at 375 / 768 / 1280px on the demo page | ⏳ awaits Phase 1 |
 | **CP-3** | Migration SQL run on staging | ⏳ awaits Phase 3 |
 
-CP-1 sign-off is in. The next deliverable is the Phase 0 prompt for Claude Code.
+CP-2 cleared on 2026-05-04. Phase 1 prompt is ready in `PROMPT_LIBRARY.md`.
 
 ---
 
@@ -359,6 +360,8 @@ Each phase is an atomic deliverable to Claude Code. You commit after each phase,
 
 `Button`, `Input`, `Card`, `Pill`, `Chip`, `Badge`, `VerificationLevelBadge`, `Avatar`, `ProgressBar`, `Icon`. Each ships with a demo entry under `app/(dev)/primitives/page.tsx` for visual review at all three breakpoints.
 
+**→ Checkpoint CP-1.5.** Visual review of every primitive in every variant at 375 / 768 / 1280px before layout work begins.
+
 ### Phase 2 — Layout & navigation
 
 `AppShell`, `Sidebar`, `Topbar`, `Tabs`, `BrandMark`. Wires the corporate dashboard chrome.
@@ -451,6 +454,7 @@ The fresh `TASKS.md` opens with a phase tracker:
 - [ ] Phase 0 — Scaffold + token system + docs skeleton
 - [ ] CP-2 — Token + RTL + typography review
 - [ ] Phase 1 — Primitives
+- [ ] CP-1.5 — Primitives visual review at 375 / 768 / 1280
 - [ ] Phase 2 — Layout & navigation
 - [ ] Phase 3 — Auth & RLS foundation
 - [ ] CP-3 — Migration on staging

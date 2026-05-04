@@ -1171,13 +1171,1368 @@ After commit, print the closing checkpoint banner per §F.4 and exit.
 
 # §Phase 1 — Primitives
 
-**Status:** stubbed. Filled after Phase 0 lands cleanly.
+## §1.1 — Goal
 
-**Goal:** Build the primitive components per BUILD_PLAN §5.B: `Button`, `Input`, `Card`, `Pill`, `Chip`, `Badge`, `VerificationLevelBadge`, `Avatar`, `ProgressBar`. (Icon already exists from Phase 0.)
+Build nine primitive components that the rest of the application is assembled from. Each primitive is a self-contained unit (`.tsx` + `.module.scss` + `.types.ts`) that consumes the token system from Phase 0 and exposes a small, opinionated API. All nine render together on one demo page for visual review.
 
-**Deliverables:** Each primitive ships with `<Component>.tsx`, `<Component>.module.scss`, `<Component>.types.ts`, plus a demo entry under `app/(dev)/primitives/page.tsx` for visual review at 375 / 768 / 1280px.
+This phase ends at **CP-1.5** — the user reviews every primitive in every variant, at three breakpoints (375 / 768 / 1280px), before Phase 2 (layout) begins.
 
-**Checkpoint:** none — Phase 1 leads into Phase 2 directly. Self-tests verify build, dev server, and visual sanity at all three breakpoints.
+## §1.2 — Inputs
+
+- `docs/BUILD_PLAN.md` — naming alignment (§5.E), folder structure (§5.B), token system (§4).
+- `docs/PROMPT_LIBRARY.md` front-matter (§F.1–§F.6) — governance and checkpoint protocol.
+- `recon/04e-brand-components.md` — every primitive's source-of-truth styling, variants, states, and known RTL bugs to fix during the port.
+- `../worker-housing-platform/docs/brand/assets/styles.css` — original CSS for each component (lines cited in `04e`).
+- `../worker-housing-platform/docs/brand/components.md` — component-by-component spec.
+- `recon/brand/mockups/01-corporate.md` and `recon/brand/mockups/02-marketplace.md` — see primitives in context.
+
+## §1.3 — Pre-flight checks
+
+Before writing any component code, verify Phase 0 landed cleanly. If any check fails, halt per §F.5.
+
+```bash
+test "$(basename "$PWD")" = "oz-marketplace" || { echo "FAIL: not in oz-marketplace"; exit 1; }
+test -d styles && test -s styles/_tokens.scss || { echo "FAIL: token system missing"; exit 1; }
+test -d components/primitives/Icon || { echo "FAIL: Phase 0 Icon primitive missing"; exit 1; }
+test -s docs/BUILD_PLAN.md || { echo "FAIL: BUILD_PLAN missing"; exit 1; }
+git log --oneline | grep -q "phase 0" || { echo "FAIL: phase 0 commit not found"; exit 1; }
+git diff --quiet || { echo "FAIL: working tree dirty — commit or stash before Phase 1"; exit 1; }
+echo "PRE-FLIGHT OK"
+```
+
+## §1.4 — Component manifest
+
+Build these nine primitives in order. Each is specified in §1.5–§1.13 below. **Read the full sub-section for a primitive before writing its files.**
+
+| # | Component | Source in legacy | RTL fixes | Driven by DB column? |
+|---|---|---|---|---|
+| 1 | `Button` | `styles.css:57-64`, `components.md:86-96` | none | no |
+| 2 | `Input` | `styles.css:227-231`, `components.md:136-137` | none | no |
+| 3 | `Card` | `styles.css:187-189`, `components.md:166-171` | none | no |
+| 4 | `Pill` | `styles.css:119-133` | none | no |
+| 5 | `Chip` | `styles.css:181-184`, `components.md:126-130` | none | no |
+| 6 | `Badge` | mockup HTML (`.badge`, `.badge.alert`, `.badge.ver`) | none | no |
+| 7 | `VerificationLevelBadge` | mockup HTML (`.badge.ver`) + BUILD_PLAN §3.D | none | **yes** — `listings.verification_level` |
+| 8 | `Avatar` | `styles.css:137-141` | `margin-inline-end` for stack (already correct) | no |
+| 9 | `ProgressBar` | `styles.css:150-156` | none | no |
+
+Naming alignment (BUILD_PLAN §F.3 / §5.E): the only column-driven primitive in this phase is `VerificationLevelBadge`, which reads `listings.verification_level` (1 | 2 | 3). Stay aligned.
+
+## §1.5 — Button
+
+### Files
+
+```
+components/primitives/Button/
+├── Button.tsx
+├── Button.module.scss
+└── Button.types.ts
+```
+
+### `Button.types.ts`
+
+```ts
+import type { ButtonHTMLAttributes, ReactNode } from 'react';
+
+export type ButtonVariant = 'cta' | 'ghost' | 'blue';
+export type ButtonSize    = 'sm' | 'base';
+
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  iconStart?: ReactNode;
+  iconEnd?: ReactNode;
+  fullWidth?: boolean;
+}
+```
+
+### `Button.tsx`
+
+```tsx
+import { forwardRef } from 'react';
+import styles from './Button.module.scss';
+import type { ButtonProps } from './Button.types';
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    variant = 'ghost',
+    size = 'base',
+    iconStart,
+    iconEnd,
+    fullWidth = false,
+    className,
+    children,
+    type = 'button',
+    ...rest
+  },
+  ref,
+) {
+  const classes = [
+    styles.button,
+    styles[`variant-${variant}`],
+    styles[`size-${size}`],
+    fullWidth && styles.fullWidth,
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <button ref={ref} type={type} className={classes} {...rest}>
+      {iconStart ? <span className={styles.iconStart}>{iconStart}</span> : null}
+      <span className={styles.label}>{children}</span>
+      {iconEnd ? <span className={styles.iconEnd}>{iconEnd}</span> : null}
+    </button>
+  );
+});
+```
+
+### `Button.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: t.space(2);
+  border-radius: t.radius(xl);
+  font-weight: t.font-weight(bold);
+  transition: t.motion(fast);
+  cursor: pointer;
+  border: 1px solid transparent;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  &:focus-visible {
+    @include m.focus-ring();
+  }
+}
+
+.iconStart, .iconEnd, .label {
+  display: inline-flex;
+  align-items: center;
+}
+
+// ───── Sizes ─────
+.size-sm {
+  padding: t.space(2) t.space(3);
+  font-size: t.font-size(sm);
+}
+.size-base {
+  padding: t.space(3) t.space(5);
+  font-size: t.font-size(base);
+}
+
+// ───── Variants ─────
+.variant-cta {
+  background: t.color(orange);
+  color: t.color(fg-on-cta);
+  box-shadow: t.shadow(orange);
+
+  &:hover:not(:disabled) {
+    background: t.color(orange-hover);
+    transform: translateY(-1px);
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.97);
+  }
+}
+
+.variant-ghost {
+  background: t.color(white);
+  color: t.color(fg-default);
+  border-color: t.color(border-default);
+
+  &:hover:not(:disabled) {
+    border-color: t.color(blue-deep);
+    color: t.color(blue-deep);
+  }
+}
+
+.variant-blue {
+  background: t.color(blue-deep);
+  color: t.color(fg-on-dark);
+
+  &:hover:not(:disabled) {
+    background: t.color(blue-deep-hover);
+  }
+}
+
+.fullWidth {
+  width: 100%;
+}
+```
+
+## §1.6 — Input
+
+### Files
+
+```
+components/primitives/Input/
+├── Input.tsx
+├── Input.module.scss
+└── Input.types.ts
+```
+
+### `Input.types.ts`
+
+```ts
+import type { InputHTMLAttributes } from 'react';
+
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'size'> {
+  label?: string;
+  hint?: string;
+  error?: string;
+  invalid?: boolean;
+  fullWidth?: boolean;
+}
+```
+
+### `Input.tsx`
+
+```tsx
+import { forwardRef, useId } from 'react';
+import styles from './Input.module.scss';
+import type { InputProps } from './Input.types';
+
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { label, hint, error, invalid, fullWidth, className, id, ...rest },
+  ref,
+) {
+  const reactId = useId();
+  const inputId = id ?? reactId;
+  const hasError = invalid || Boolean(error);
+
+  const wrapperClasses = [
+    styles.field,
+    fullWidth && styles.fullWidth,
+    hasError && styles.invalid,
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <div className={wrapperClasses}>
+      {label ? <label htmlFor={inputId} className={styles.label}>{label}</label> : null}
+      <input
+        ref={ref}
+        id={inputId}
+        className={styles.input}
+        aria-invalid={hasError || undefined}
+        aria-describedby={error || hint ? `${inputId}-help` : undefined}
+        {...rest}
+      />
+      {(error || hint) && (
+        <span id={`${inputId}-help`} className={error ? styles.error : styles.hint}>
+          {error ?? hint}
+        </span>
+      )}
+    </div>
+  );
+});
+```
+
+### `Input.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: t.space(2);
+}
+
+.fullWidth {
+  display: flex;
+  width: 100%;
+}
+
+.label {
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(semibold);
+  color: t.color(fg-default);
+}
+
+.input {
+  width: 100%;
+  padding: t.space(3) t.space(4);
+  border: 1px solid t.color(border-default);
+  border-radius: t.radius(lg);
+  background: t.color(white);
+  color: t.color(fg-default);
+  font-size: t.font-size(base);
+  transition: t.motion(fast);
+
+  &::placeholder {
+    color: t.color(fg-faint);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: t.color(blue-deep);
+    box-shadow: 0 0 0 3px rgb(27 58 107 / 0.12);
+  }
+
+  &:disabled {
+    background: t.color(gray-100);
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+}
+
+.hint  { font-size: t.font-size(xs); color: t.color(fg-muted); }
+.error { font-size: t.font-size(xs); color: t.color(red-600); }
+
+.invalid .input {
+  border-color: t.color(red-500);
+
+  &:focus {
+    box-shadow: 0 0 0 3px rgb(239 68 68 / 0.18);
+  }
+}
+```
+
+## §1.7 — Card
+
+### Files
+
+```
+components/primitives/Card/
+├── Card.tsx
+├── Card.module.scss
+└── Card.types.ts
+```
+
+### `Card.types.ts`
+
+```ts
+import type { HTMLAttributes, ReactNode } from 'react';
+
+export type CardVariant = 'default' | 'outline' | 'elevated';
+
+export interface CardProps extends HTMLAttributes<HTMLElement> {
+  variant?: CardVariant;
+  as?: 'div' | 'article' | 'section';
+  padded?: boolean;
+  children?: ReactNode;
+}
+```
+
+### `Card.tsx`
+
+```tsx
+import styles from './Card.module.scss';
+import type { CardProps } from './Card.types';
+
+export function Card({
+  variant = 'default',
+  as: Tag = 'div',
+  padded = true,
+  className,
+  children,
+  ...rest
+}: CardProps) {
+  const classes = [
+    styles.card,
+    styles[`variant-${variant}`],
+    padded && styles.padded,
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <Tag className={classes} {...rest}>
+      {children}
+    </Tag>
+  );
+}
+```
+
+### `Card.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.card {
+  background: t.color(white);
+  border-radius: t.radius(2xl);
+  border: 1px solid transparent;
+}
+
+.padded {
+  padding: t.space(4);
+}
+
+.variant-default  { box-shadow: t.shadow(sm); }
+.variant-outline  { box-shadow: none; border-color: t.color(border-default); }
+.variant-elevated { box-shadow: t.shadow(md); }
+```
+
+## §1.8 — Pill
+
+A pill is a small rounded label. Used for status, tags, counts, "live" indicators.
+
+### Files
+
+```
+components/primitives/Pill/
+├── Pill.tsx
+├── Pill.module.scss
+└── Pill.types.ts
+```
+
+### `Pill.types.ts`
+
+```ts
+import type { HTMLAttributes, ReactNode } from 'react';
+
+export type PillTone =
+  | 'gray'
+  | 'green-deep'
+  | 'green-soft'
+  | 'blue-deep'
+  | 'blue-soft'
+  | 'orange-deep'
+  | 'orange-soft'
+  | 'red-soft'
+  | 'amber-soft';
+
+export type PillSize = 'sm' | 'base';
+
+export interface PillProps extends HTMLAttributes<HTMLSpanElement> {
+  tone?: PillTone;
+  size?: PillSize;
+  live?: boolean;
+  iconStart?: ReactNode;
+  children: ReactNode;
+}
+```
+
+### `Pill.tsx`
+
+```tsx
+import styles from './Pill.module.scss';
+import type { PillProps } from './Pill.types';
+
+export function Pill({
+  tone = 'gray',
+  size = 'base',
+  live = false,
+  iconStart,
+  className,
+  children,
+  ...rest
+}: PillProps) {
+  const classes = [
+    styles.pill,
+    styles[`tone-${tone}`],
+    styles[`size-${size}`],
+    live && styles.live,
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <span className={classes} {...rest}>
+      {live ? <span className={styles.dot} aria-hidden /> : null}
+      {iconStart ? <span className={styles.iconStart}>{iconStart}</span> : null}
+      <span>{children}</span>
+    </span>
+  );
+}
+```
+
+### `Pill.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: t.space(1);
+  border-radius: t.radius(full);
+  font-weight: t.font-weight(semibold);
+  white-space: nowrap;
+}
+
+.iconStart { display: inline-flex; }
+
+.size-sm   { padding: 2px t.space(2);    font-size: t.font-size(xs); }
+.size-base { padding: t.space(1) t.space(3); font-size: t.font-size(sm); }
+
+// ───── Tones ─────
+.tone-gray         { background: t.color(gray-100);       color: t.color(gray-700); }
+.tone-green-deep   { background: t.color(green-deep);     color: t.color(white); }
+.tone-green-soft   { background: t.color(green-deep-soft); color: t.color(green-deep); }
+.tone-blue-deep    { background: t.color(blue-deep);      color: t.color(white); }
+.tone-blue-soft    { background: t.color(blue-bg-soft);   color: t.color(blue-deep); }
+.tone-orange-deep  { background: t.color(orange);         color: t.color(white); }
+.tone-orange-soft  { background: t.color(orange-soft);    color: t.color(orange); }
+.tone-red-soft     { background: rgb(239 68 68 / 0.12);   color: t.color(red-600); }
+.tone-amber-soft   { background: t.color(amber-50);       color: t.color(amber-500); }
+
+// ───── Live indicator ─────
+.live .dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: t.radius(full);
+  background: t.color(green-light);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+```
+
+## §1.9 — Chip
+
+A chip is a filter or tag, optionally with a close (×) action. Distinct from `Pill` because it's interactive.
+
+### Files
+
+```
+components/primitives/Chip/
+├── Chip.tsx
+├── Chip.module.scss
+└── Chip.types.ts
+```
+
+### `Chip.types.ts`
+
+```ts
+import type { HTMLAttributes, ReactNode, MouseEventHandler } from 'react';
+
+export interface ChipProps extends HTMLAttributes<HTMLSpanElement> {
+  active?: boolean;
+  verified?: boolean;
+  onRemove?: MouseEventHandler<HTMLButtonElement>;
+  children: ReactNode;
+}
+```
+
+### `Chip.tsx`
+
+```tsx
+import styles from './Chip.module.scss';
+import type { ChipProps } from './Chip.types';
+
+export function Chip({
+  active = false,
+  verified = false,
+  onRemove,
+  className,
+  children,
+  ...rest
+}: ChipProps) {
+  const classes = [
+    styles.chip,
+    active && styles.active,
+    verified && styles.verified,
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <span className={classes} {...rest}>
+      <span>{children}</span>
+      {onRemove ? (
+        <button
+          type="button"
+          className={styles.remove}
+          aria-label="הסרה"
+          onClick={onRemove}
+        >
+          ×
+        </button>
+      ) : null}
+    </span>
+  );
+}
+```
+
+### `Chip.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: t.space(2);
+  padding: t.space(2) t.space(3);
+  border-radius: t.radius(full);
+  background: t.color(white);
+  color: t.color(fg-default);
+  border: 1px solid t.color(border-default);
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(medium);
+  cursor: pointer;
+  transition: t.motion(fast);
+
+  &:hover {
+    border-color: t.color(blue-deep);
+    color: t.color(blue-deep);
+  }
+}
+
+.active {
+  background: t.color(blue-deep);
+  color: t.color(fg-on-dark);
+  border-color: t.color(blue-deep);
+
+  &:hover {
+    color: t.color(fg-on-dark);
+  }
+}
+
+.verified {
+  background: t.color(green-deep);
+  color: t.color(fg-on-dark);
+  border-color: t.color(green-deep);
+
+  &:hover {
+    color: t.color(fg-on-dark);
+  }
+}
+
+.remove {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: t.font-size(base);
+  line-height: 1;
+  opacity: 0.6;
+  cursor: pointer;
+
+  &:hover { opacity: 1; }
+}
+```
+
+## §1.10 — Badge
+
+A counter badge — typically attached to a nav item or tab to show unread count. Smaller and more numeric than a Pill.
+
+### Files
+
+```
+components/primitives/Badge/
+├── Badge.tsx
+├── Badge.module.scss
+└── Badge.types.ts
+```
+
+### `Badge.types.ts`
+
+```ts
+import type { HTMLAttributes } from 'react';
+
+export type BadgeTone = 'gray' | 'blue-soft' | 'alert';
+
+export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
+  tone?: BadgeTone;
+  count: number;
+  max?: number;        // e.g. 99 → renders "99+" past that
+}
+```
+
+### `Badge.tsx`
+
+```tsx
+import styles from './Badge.module.scss';
+import type { BadgeProps } from './Badge.types';
+
+export function Badge({ tone = 'gray', count, max = 99, className, ...rest }: BadgeProps) {
+  if (count <= 0) return null;
+  const display = count > max ? `${max}+` : String(count);
+
+  const classes = [styles.badge, styles[`tone-${tone}`], className]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <span className={classes} {...rest}>
+      {display}
+    </span>
+  );
+}
+```
+
+### `Badge.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 t.space(2);
+  border-radius: t.radius(full);
+  font-size: t.font-size(xs);
+  font-weight: t.font-weight(bold);
+  font-variant-numeric: tabular-nums;
+}
+
+.tone-gray      { background: t.color(gray-200);     color: t.color(gray-700); }
+.tone-blue-soft { background: t.color(blue-bg-soft); color: t.color(blue-deep); }
+.tone-alert     { background: t.color(red-500);      color: t.color(white); }
+```
+
+## §1.11 — VerificationLevelBadge
+
+Column-driven primitive (BUILD_PLAN §3.D, §F.3). Reads `listings.verification_level` (1 | 2 | 3) and renders a tone-coded Pill.
+
+### Files
+
+```
+components/primitives/VerificationLevelBadge/
+├── VerificationLevelBadge.tsx
+├── VerificationLevelBadge.module.scss
+└── VerificationLevelBadge.types.ts
+```
+
+### `VerificationLevelBadge.types.ts`
+
+```ts
+export type VerificationLevel = 1 | 2 | 3;
+
+export interface VerificationLevelBadgeProps {
+  level: VerificationLevel;
+  className?: string;
+}
+```
+
+### `VerificationLevelBadge.tsx`
+
+```tsx
+import { Pill } from '../Pill/Pill';
+import { Icon } from '../Icon/Icon';
+import styles from './VerificationLevelBadge.module.scss';
+import type { VerificationLevelBadgeProps } from './VerificationLevelBadge.types';
+
+const TONE_BY_LEVEL = {
+  1: 'gray',
+  2: 'blue-soft',
+  3: 'green-deep',
+} as const;
+
+const LABEL_BY_LEVEL = {
+  1: 'רמת אימות 1',
+  2: 'רמת אימות 2',
+  3: 'רמת אימות 3',
+} as const;
+
+export function VerificationLevelBadge({ level, className }: VerificationLevelBadgeProps) {
+  return (
+    <Pill
+      tone={TONE_BY_LEVEL[level]}
+      size="base"
+      iconStart={<Icon name="shield-check" size="sm" />}
+      className={[styles.badge, className].filter(Boolean).join(' ')}
+    >
+      {LABEL_BY_LEVEL[level]}
+    </Pill>
+  );
+}
+```
+
+If the icon name `shield-check` is not in `public/icons.svg`, swap to the closest available verification-related icon (e.g., `check`, `shield`, `verified`). Do not invent symbol IDs that don't exist in the sprite.
+
+### `VerificationLevelBadge.module.scss`
+
+```scss
+// Reserved for level-specific overrides.
+// All tone/size handling is delegated to Pill.
+.badge {
+  // intentionally empty — kept as a stable hook for future styling needs.
+}
+```
+
+## §1.12 — Avatar
+
+### Files
+
+```
+components/primitives/Avatar/
+├── Avatar.tsx
+├── Avatar.module.scss
+└── Avatar.types.ts
+```
+
+### `Avatar.types.ts`
+
+```ts
+import type { HTMLAttributes } from 'react';
+
+export type AvatarSize = 'sm' | 'base' | 'lg';
+
+export interface AvatarProps extends Omit<HTMLAttributes<HTMLSpanElement>, 'children'> {
+  name: string;            // used for initials and aria-label
+  src?: string;
+  size?: AvatarSize;
+  tone?: 'green' | 'blue' | 'orange' | 'gray';
+}
+```
+
+### `Avatar.tsx`
+
+```tsx
+import styles from './Avatar.module.scss';
+import type { AvatarProps } from './Avatar.types';
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) return parts[0]!.charAt(0).toUpperCase();
+  return (parts[0]!.charAt(0) + parts[parts.length - 1]!.charAt(0)).toUpperCase();
+}
+
+export function Avatar({
+  name,
+  src,
+  size = 'base',
+  tone = 'green',
+  className,
+  ...rest
+}: AvatarProps) {
+  const classes = [styles.avatar, styles[`size-${size}`], styles[`tone-${tone}`], className]
+    .filter(Boolean)
+    .join(' ');
+
+  return (
+    <span className={classes} role="img" aria-label={name} {...rest}>
+      {src ? (
+        <img src={src} alt="" className={styles.img} />
+      ) : (
+        <span aria-hidden>{initialsOf(name)}</span>
+      )}
+    </span>
+  );
+}
+```
+
+### `Avatar.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: t.radius(full);
+  font-weight: t.font-weight(bold);
+  color: t.color(fg-on-dark);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.size-sm   { width: 26px; height: 26px; font-size: t.font-size(xs); }
+.size-base { width: 32px; height: 32px; font-size: t.font-size(sm); }
+.size-lg   { width: 44px; height: 44px; font-size: t.font-size(base); }
+
+.tone-green  { background: t.color(green-light); }
+.tone-blue   { background: t.color(blue-light); }
+.tone-orange { background: t.color(orange); }
+.tone-gray   { background: t.color(gray-400); }
+```
+
+## §1.13 — ProgressBar
+
+### Files
+
+```
+components/primitives/ProgressBar/
+├── ProgressBar.tsx
+├── ProgressBar.module.scss
+└── ProgressBar.types.ts
+```
+
+### `ProgressBar.types.ts`
+
+```ts
+import type { HTMLAttributes } from 'react';
+
+export type ProgressTone = 'blue' | 'green' | 'orange' | 'red';
+
+export interface ProgressBarProps extends Omit<HTMLAttributes<HTMLDivElement>, 'children'> {
+  value: number;       // 0–100
+  tone?: ProgressTone;
+  showLabel?: boolean;
+  label?: string;      // optional override; defaults to "<value>%"
+}
+```
+
+### `ProgressBar.tsx`
+
+```tsx
+import styles from './ProgressBar.module.scss';
+import type { ProgressBarProps } from './ProgressBar.types';
+
+function clamp(n: number): number {
+  if (Number.isNaN(n)) return 0;
+  if (n < 0) return 0;
+  if (n > 100) return 100;
+  return n;
+}
+
+export function ProgressBar({
+  value,
+  tone = 'blue',
+  showLabel = false,
+  label,
+  className,
+  ...rest
+}: ProgressBarProps) {
+  const pct = clamp(value);
+  const display = label ?? `${Math.round(pct)}%`;
+
+  const classes = [styles.row, className].filter(Boolean).join(' ');
+
+  return (
+    <div className={classes} {...rest}>
+      <div
+        className={styles.track}
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
+      >
+        <div className={`${styles.fill} ${styles[`tone-${tone}`]}`} style={{ width: `${pct}%` }} />
+      </div>
+      {showLabel ? <span className={styles.label}>{display}</span> : null}
+    </div>
+  );
+}
+```
+
+### `ProgressBar.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  width: 100%;
+}
+
+.track {
+  flex: 1;
+  height: 8px;
+  background: t.color(gray-200);
+  border-radius: t.radius(full);
+  overflow: hidden;
+}
+
+.fill {
+  height: 100%;
+  border-radius: t.radius(full);
+  transition: width t.motion(slow);
+}
+
+.tone-blue   { background: t.color(blue-deep); }
+.tone-green  { background: t.color(green-deep); }
+.tone-orange { background: t.color(orange); }
+.tone-red    { background: t.color(red-500); }
+
+.label {
+  font-size: t.font-size(sm);
+  font-variant-numeric: tabular-nums;
+  color: t.color(fg-muted);
+  min-width: 40px;
+  text-align: end;  // RTL-aware
+}
+```
+
+## §1.14 — Demo page
+
+Build a single demo page that renders every primitive in every variant. This is the visual review surface for CP-1.5.
+
+### Route
+
+`app/(dev)/primitives/page.tsx`
+
+The `(dev)` route group keeps developer-facing pages isolated from real product routes. Phase 0 already established the convention; if `app/(dev)/` does not exist, create it.
+
+### `app/(dev)/primitives/page.tsx`
+
+```tsx
+import { Avatar } from '@/components/primitives/Avatar/Avatar';
+import { Badge } from '@/components/primitives/Badge/Badge';
+import { Button } from '@/components/primitives/Button/Button';
+import { Card } from '@/components/primitives/Card/Card';
+import { Chip } from '@/components/primitives/Chip/Chip';
+import { Icon } from '@/components/primitives/Icon/Icon';
+import { Input } from '@/components/primitives/Input/Input';
+import { Pill } from '@/components/primitives/Pill/Pill';
+import { ProgressBar } from '@/components/primitives/ProgressBar/ProgressBar';
+import { VerificationLevelBadge } from '@/components/primitives/VerificationLevelBadge/VerificationLevelBadge';
+
+import styles from './page.module.scss';
+
+export const metadata = { title: 'עוז · Primitives Demo' };
+
+export default function PrimitivesDemoPage() {
+  return (
+    <main className={styles.page}>
+      <header className={styles.header}>
+        <h1>בדיקת רכיבי בסיס</h1>
+        <p>Phase 1 · CP-1.5 review surface</p>
+      </header>
+
+      <Section title="Button">
+        <Row label="variants">
+          <Button variant="cta">CTA ראשי</Button>
+          <Button variant="ghost">משני (ghost)</Button>
+          <Button variant="blue">כחול</Button>
+        </Row>
+        <Row label="sizes">
+          <Button variant="cta" size="sm">קטן</Button>
+          <Button variant="cta" size="base">רגיל</Button>
+        </Row>
+        <Row label="states">
+          <Button variant="cta">רגיל</Button>
+          <Button variant="cta" disabled>מנוטרל</Button>
+          <Button variant="cta" iconStart={<Icon name="plus" size="sm" />}>עם אייקון</Button>
+        </Row>
+      </Section>
+
+      <Section title="Input">
+        <Row label="variants">
+          <Input label="שם מלא" placeholder="ישראלה ישראלי" />
+          <Input label="עם רמז" placeholder="example@oz.co.il" hint="כתובת מייל לקבלת התראות" />
+          <Input label="שגיאה" placeholder="" error="שדה חובה" />
+          <Input label="מנוטרל" placeholder="" disabled defaultValue="—" />
+        </Row>
+      </Section>
+
+      <Section title="Card">
+        <Row label="variants">
+          <Card variant="default">
+            <h3>Default</h3>
+            <p>צל קל · ברירת מחדל</p>
+          </Card>
+          <Card variant="outline">
+            <h3>Outline</h3>
+            <p>מסגרת בלבד · ללא צל</p>
+          </Card>
+          <Card variant="elevated">
+            <h3>Elevated</h3>
+            <p>צל בולט · להדגשת תוכן</p>
+          </Card>
+        </Row>
+      </Section>
+
+      <Section title="Pill">
+        <Row label="tones">
+          <Pill tone="gray">Gray</Pill>
+          <Pill tone="green-deep">Green Deep</Pill>
+          <Pill tone="green-soft">Green Soft</Pill>
+          <Pill tone="blue-deep">Blue Deep</Pill>
+          <Pill tone="blue-soft">Blue Soft</Pill>
+          <Pill tone="orange-deep">Orange Deep</Pill>
+          <Pill tone="orange-soft">Orange Soft</Pill>
+          <Pill tone="red-soft">Red Soft</Pill>
+          <Pill tone="amber-soft">Amber Soft</Pill>
+        </Row>
+        <Row label="live">
+          <Pill tone="green-soft" live>פעיל עכשיו</Pill>
+        </Row>
+      </Section>
+
+      <Section title="Chip">
+        <Row label="states">
+          <Chip>תל-אביב</Chip>
+          <Chip active>נבחר</Chip>
+          <Chip verified>מאומת</Chip>
+          <Chip onRemove={() => undefined}>עם הסרה</Chip>
+        </Row>
+      </Section>
+
+      <Section title="Badge">
+        <Row label="tones">
+          <Badge tone="gray" count={3} />
+          <Badge tone="blue-soft" count={12} />
+          <Badge tone="alert" count={147} />
+          <Badge tone="alert" count={0} />
+          <span className={styles.muted}>(count=0 לא מרונדר)</span>
+        </Row>
+      </Section>
+
+      <Section title="VerificationLevelBadge">
+        <Row label="levels">
+          <VerificationLevelBadge level={1} />
+          <VerificationLevelBadge level={2} />
+          <VerificationLevelBadge level={3} />
+        </Row>
+      </Section>
+
+      <Section title="Avatar">
+        <Row label="sizes">
+          <Avatar name="Adir Amsalem" size="sm" />
+          <Avatar name="Adir Amsalem" size="base" />
+          <Avatar name="Adir Amsalem" size="lg" />
+        </Row>
+        <Row label="tones">
+          <Avatar name="Roi Alex" tone="green" />
+          <Avatar name="Maya Levi" tone="blue" />
+          <Avatar name="Dagan Aar" tone="orange" />
+          <Avatar name="עוזי טסט" tone="gray" />
+        </Row>
+      </Section>
+
+      <Section title="ProgressBar">
+        <Row label="tones + values">
+          <ProgressBar value={20} tone="blue" showLabel />
+          <ProgressBar value={55} tone="green" showLabel />
+          <ProgressBar value={80} tone="orange" showLabel />
+          <ProgressBar value={95} tone="red" showLabel />
+        </Row>
+      </Section>
+    </main>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className={styles.section}>
+      <h2>{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className={styles.row}>
+      <span className={styles.rowLabel}>{label}</span>
+      <div className={styles.rowItems}>{children}</div>
+    </div>
+  );
+}
+```
+
+### `app/(dev)/primitives/page.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.page {
+  min-height: 100vh;
+  padding: t.space(6);
+  display: flex;
+  flex-direction: column;
+  gap: t.space(8);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(10);
+    max-width: 1280px;
+    margin-inline: auto;
+  }
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+
+  h1 {
+    font-size: t.font-size(3xl);
+  }
+
+  p {
+    color: t.color(fg-muted);
+    font-size: t.font-size(sm);
+  }
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(4);
+  padding: t.space(6);
+  background: t.color(white);
+  border: 1px solid t.color(border-default);
+  border-radius: t.radius(2xl);
+
+  h2 {
+    font-size: t.font-size(xl);
+  }
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+
+  @include m.from(t.bp(md)) {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: t.space(6);
+  }
+}
+
+.rowLabel {
+  font-size: t.font-size(xs);
+  font-weight: t.font-weight(bold);
+  color: t.color(fg-faint);
+  text-transform: uppercase;
+  letter-spacing: t.tracking(wider);
+  min-width: 100px;
+  padding-block-start: t.space(2);
+}
+
+.rowItems {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: t.space(3);
+  flex: 1;
+}
+
+.muted {
+  color: t.color(fg-muted);
+  font-size: t.font-size(sm);
+}
+```
+
+## §1.15 — Self-tests (CP-1.5 gate)
+
+Run each test below. Capture verbatim output. Report PASS/FAIL per §F.4.
+
+### Test 1 — TypeScript compiles
+
+```bash
+npx tsc --noEmit
+```
+
+PASS iff exit 0 and no error output.
+
+### Test 2 — Lint passes
+
+```bash
+npm run lint
+```
+
+PASS iff exit 0. (Warnings acceptable; errors are not.)
+
+### Test 3 — Build passes
+
+```bash
+npm run build
+```
+
+PASS iff exit 0.
+
+### Test 4 — All nine primitives present
+
+```bash
+for c in Button Input Card Pill Chip Badge VerificationLevelBadge Avatar ProgressBar; do
+  test -f "components/primitives/$c/$c.tsx" || { echo "FAIL: $c.tsx missing"; exit 1; }
+  test -f "components/primitives/$c/$c.module.scss" || { echo "FAIL: $c.module.scss missing"; exit 1; }
+  test -f "components/primitives/$c/$c.types.ts" || { echo "FAIL: $c.types.ts missing"; exit 1; }
+done
+echo "ALL PRIMITIVES PRESENT"
+```
+
+PASS iff the loop completes without failing.
+
+### Test 5 — Demo page renders without server-side errors
+
+```bash
+npm run dev > /tmp/oz-dev.log 2>&1 &
+DEV_PID=$!
+sleep 8
+HTTP_CODE=$(curl -s -o /tmp/oz-demo.html -w "%{http_code}" http://localhost:3000/primitives)
+kill $DEV_PID 2>/dev/null
+```
+
+PASS iff:
+
+- `HTTP_CODE` = `200`
+- `/tmp/oz-demo.html` contains every section title: `Button`, `Input`, `Card`, `Pill`, `Chip`, `Badge`, `VerificationLevelBadge`, `Avatar`, `ProgressBar`.
+- `/tmp/oz-demo.html` contains `lang="he"` and `dir="rtl"`.
+- `/tmp/oz-dev.log` contains no `Error:` or `Failed to compile` lines.
+
+### Test 6 — VerificationLevelBadge naming alignment
+
+```bash
+grep -q 'verification_level' components/primitives/VerificationLevelBadge/VerificationLevelBadge.types.ts \
+  || grep -q 'VerificationLevel' components/primitives/VerificationLevelBadge/VerificationLevelBadge.types.ts
+```
+
+PASS iff the type file references the canonical name. (Acceptance is loose because the TS type uses PascalCase `VerificationLevel`; the DB column is snake_case `verification_level`. Either confirms alignment.)
+
+### Test 7 — No raw color values in primitive SCSS
+
+Per BUILD_PLAN §5.B: "Modules `@use` the token/mixin layer; they never contain raw color values."
+
+```bash
+# Look for hex colors (#xxx, #xxxxxx) outside @use lines and comments
+FOUND=$(grep -rEn '^[^/]*#[0-9a-fA-F]{3,8}\b' components/primitives \
+  --include='*.module.scss' \
+  | grep -v '^\s*//' \
+  | grep -v '@use')
+if [ -n "$FOUND" ]; then
+  echo "FAIL: raw color literals in primitive SCSS:"
+  echo "$FOUND"
+  exit 1
+fi
+echo "NO RAW COLORS"
+```
+
+PASS iff no hex literals are found in primitive `.module.scss` files. (Inline `rgb(...)` calls used for focus rings inside the primitives are acceptable but should be rare — flag any to the user without failing the test.)
+
+## §1.16 — Commit (after user types `continue`)
+
+Stage all new files under `components/primitives/` and `app/(dev)/primitives/`. Confirm by listing staged files. Then commit with this message:
+
+```
+phase 1: nine primitive components + CP-1.5 demo page
+
+- Button (3 variants, 2 sizes, icon slots)
+- Input (label, hint, error, invalid, fullWidth)
+- Card (default | outline | elevated; padded toggle)
+- Pill (9 tones, 2 sizes, live indicator)
+- Chip (active, verified, removable)
+- Badge (3 tones, count + max overflow)
+- VerificationLevelBadge (column-driven by listings.verification_level)
+- Avatar (3 sizes, 4 tones, image or initials)
+- ProgressBar (4 tones, optional label)
+
+Demo page at app/(dev)/primitives/ renders all primitives at three
+breakpoints (375 / 768 / 1280px) for CP-1.5 visual review.
+
+Reaches CP-1.5.
+```
+
+After commit, print the closing checkpoint banner per §F.4 and exit.
 
 ---
 
