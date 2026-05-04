@@ -1,0 +1,41 @@
+@use "tokens" as t;
+
+.flex   { display: flex; }
+.row    { display: flex; flex-direction: row; }
+.col    { display: flex; flex-direction: column; }
+.center { display: flex; align-items: center; justify-content: center; }
+.right  { text-align: end; } // RTL-aware
+
+.gap-1  { gap: t.space(1); }
+.gap-2  { gap: t.space(2); }
+.gap-3  { gap: t.space(3); }
+.gap-4  { gap: t.space(4); }
+.gap-5  { gap: t.space(5); }
+.gap-6  { gap: t.space(6); }
+
+.muted  { color: t.color(fg-muted); }
+.faint  { color: t.color(fg-faint); }
+
+.b      { font-weight: t.font-weight(bold); }
+.xb     { font-weight: t.font-weight(extrabold); }
+
+.t-xs   { font-size: t.font-size(xs); }
+.t-sm   { font-size: t.font-size(sm); }
+.t-base { font-size: t.font-size(base); }
+.t-lg   { font-size: t.font-size(lg); }
+.t-xl   { font-size: t.font-size(xl); }
+.t-2xl  { font-size: t.font-size(2xl); }
+
+.tnum   { font-variant-numeric: tabular-nums; }
+
+.divider {
+  height: 1px;
+  background: t.color(border-default);
+  margin: t.space(4) 0;
+
+  &.v {
+    width: 1px;
+    height: auto;
+    margin: 0 t.space(4);
+  }
+}

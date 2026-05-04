@@ -1,0 +1,14 @@
+.icon {
+  display: inline-block;
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sm   { width: 14px; height: 14px; }
+.base { width: 18px; height: 18px; }
+.md   { width: 20px; height: 20px; }
+.lg   { width: 24px; height: 24px; }
