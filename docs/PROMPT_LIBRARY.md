@@ -2538,11 +2538,1262 @@ After commit, print the closing checkpoint banner per §F.4 and exit.
 
 # §Phase 2 — Layout & navigation
 
-**Status:** stubbed.
+## §2.1 — Goal
 
-**Goal:** Build `AppShell`, `Sidebar`, `Topbar`, `Tabs`, `BrandMark` per BUILD_PLAN §5.B and the brand mockups (`corporate_assets_mvp.html`, `corporate_assets_full.html`).
+Build the navigation chrome that wraps the corporate dashboard: a left-positioned sidebar (right-positioned in RTL) with brand mark, tenant switcher, nav links, and user widget; a topbar with H1, subtitle, and action slots; a tab strip; and a mobile-friendly drawer that the sidebar collapses into below `md`. All wired into a route-group layout under `app/(corporate)/`.
 
-**Deliverables:** App shell wired into `app/(corporate)/layout.tsx`. Sidebar in correct RTL position. Topbar with H1/subtitle/actions slots. Tabs with badge variants. BrandMark with the 🏗 + עוז lockup.
+This phase ends at **CP-2.5** — visual review of the layout shell at 375 / 768 / 1280px before Phase 3 (Auth) begins.
+
+## §2.2 — Inputs
+
+- `docs/BUILD_PLAN.md` — naming alignment, folder structure, mobile-first + RTL strategy.
+- `docs/PROMPT_LIBRARY.md` front-matter (§F.1–§F.6) — governance.
+- `recon/04e-brand-components.md` — Layout, Navigation, and User-widget sections (lines covering `.app`, `.side`, `.topbar`, `.tabs`, `.brand`, `.tenant`, `.nav-link`, `.me`).
+- `../worker-housing-platform/docs/brand/assets/styles.css` — original CSS for these components.
+- `recon/brand/mockups/01-corporate.md` — `corporate_assets_mvp.html` and `corporate_assets_full.html`. The 7 nav items, 7 tab labels, and the user-widget structure all come from these mockups.
+- `components/primitives/` from Phase 1 — `Icon`, `Avatar`, `Badge`, `Pill`. Reuse them; do not re-implement.
+
+## §2.3 — Pre-flight checks
+
+```bash
+test "$(basename "$PWD")" = "oz-marketplace" || { echo "FAIL: not in oz-marketplace"; exit 1; }
+test -d components/primitives/Icon || { echo "FAIL: Phase 0 Icon missing"; exit 1; }
+test -d components/primitives/Avatar || { echo "FAIL: Phase 1 Avatar missing"; exit 1; }
+test -d components/primitives/Badge || { echo "FAIL: Phase 1 Badge missing"; exit 1; }
+git log --oneline | grep -q "phase 1" || { echo "FAIL: phase 1 commit not found"; exit 1; }
+git diff --quiet || { echo "FAIL: working tree dirty"; exit 1; }
+echo "PRE-FLIGHT OK"
+```
+
+## §2.4 — Component manifest
+
+| # | Component | Source in legacy | Notes |
+|---|---|---|---|
+| 1 | `BrandMark` | `styles.css:19-22`, `corporate_assets_mvp.html` | 🏗 + עוז lockup, used in Sidebar header |
+| 2 | `TenantSwitcher` | `styles.css:23-28` | Dark card with company logo + label + chevron; non-functional shell for now (no menu open behavior) |
+| 3 | `NavLink` | `styles.css:32-37` | Single sidebar nav item with optional `Badge` |
+| 4 | `UserWidget` | `styles.css:39-43` | Bottom-of-sidebar avatar + name + role |
+| 5 | `Sidebar` | `styles.css:18`, mockups | Composes `BrandMark`, `TenantSwitcher`, nav list, `UserWidget` |
+| 6 | `Topbar` | `styles.css:47-50` | Sticky header with `<h1>` slot, subtitle slot, actions slot |
+| 7 | `Tabs` | `styles.css:67-72` | Horizontal strip with optional `Badge` per tab; active state |
+| 8 | `MobileDrawer` | none — invented for mobile | Off-canvas drawer that holds the sidebar contents at < `md` |
+| 9 | `AppShell` | `styles.css:14-15` | Top-level layout: sidebar (or drawer trigger) + main content |
+
+## §2.5 — BrandMark
+
+### Files
+
+```
+components/layout/BrandMark/
+├── BrandMark.tsx
+├── BrandMark.module.scss
+└── BrandMark.types.ts
+```
+
+### `BrandMark.types.ts`
+
+```ts
+import type { HTMLAttributes } from 'react';
+
+export interface BrandMarkProps extends HTMLAttributes<HTMLSpanElement> {
+  size?: 'sm' | 'base' | 'lg';
+}
+```
+
+### `BrandMark.tsx`
+
+```tsx
+import styles from './BrandMark.module.scss';
+import type { BrandMarkProps } from './BrandMark.types';
+
+export function BrandMark({ size = 'base', className, ...rest }: BrandMarkProps) {
+  const classes = [styles.brand, styles[`size-${size}`], className].filter(Boolean).join(' ');
+  return (
+    <span className={classes} {...rest}>
+      <span className={styles.icon} aria-hidden>🏗</span>
+      <span className={styles.name}>עוז</span>
+    </span>
+  );
+}
+```
+
+### `BrandMark.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: t.space(2);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: t.color(orange);
+  border-radius: t.radius(lg);
+  color: t.color(white);
+  line-height: 1;
+}
+
+.name {
+  font-weight: t.font-weight(extrabold);
+  letter-spacing: t.tracking(tight);
+  color: t.color(white);
+}
+
+.size-sm   .icon { width: 24px; height: 24px; font-size: 14px; }
+.size-sm   .name { font-size: t.font-size(base); }
+
+.size-base .icon { width: 32px; height: 32px; font-size: 18px; }
+.size-base .name { font-size: t.font-size(xl); }
+
+.size-lg   .icon { width: 40px; height: 40px; font-size: 22px; }
+.size-lg   .name { font-size: t.font-size(2xl); }
+```
+
+## §2.6 — TenantSwitcher
+
+### Files
+
+```
+components/layout/TenantSwitcher/
+├── TenantSwitcher.tsx
+├── TenantSwitcher.module.scss
+└── TenantSwitcher.types.ts
+```
+
+### `TenantSwitcher.types.ts`
+
+```ts
+import type { ButtonHTMLAttributes } from 'react';
+
+export interface TenantSwitcherProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  tenantName: string;       // e.g. "AM Hostels"
+  tenantLabel?: string;     // e.g. "ארגון" — small caption above name
+  logoUrl?: string;         // optional; falls back to first-letter circle
+}
+```
+
+### `TenantSwitcher.tsx`
+
+```tsx
+'use client';
+
+import { Icon } from '@/components/primitives/Icon/Icon';
+import styles from './TenantSwitcher.module.scss';
+import type { TenantSwitcherProps } from './TenantSwitcher.types';
+
+export function TenantSwitcher({
+  tenantName,
+  tenantLabel = 'ארגון',
+  logoUrl,
+  className,
+  ...rest
+}: TenantSwitcherProps) {
+  const classes = [styles.tenant, className].filter(Boolean).join(' ');
+  return (
+    <button type="button" className={classes} {...rest}>
+      <span className={styles.logo} aria-hidden>
+        {logoUrl ? <img src={logoUrl} alt="" /> : tenantName.charAt(0)}
+      </span>
+      <span className={styles.body}>
+        <span className={styles.label}>{tenantLabel}</span>
+        <span className={styles.name}>{tenantName}</span>
+      </span>
+      <Icon name="chevron-down" size="sm" className={styles.chevron} aria-hidden />
+    </button>
+  );
+}
+```
+
+### `TenantSwitcher.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.tenant {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  width: 100%;
+  padding: t.space(3);
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: t.radius(lg);
+  color: t.color(white);
+  cursor: pointer;
+  transition: t.motion(fast);
+
+  &:hover {
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: t.radius(md);
+  background: t.color(orange);
+  font-weight: t.font-weight(extrabold);
+  font-size: t.font-size(sm);
+  flex-shrink: 0;
+  overflow: hidden;
+
+  img { width: 100%; height: 100%; object-fit: cover; }
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+
+.label {
+  font-size: t.font-size(xs);
+  color: rgb(255 255 255 / 0.6);
+  text-transform: uppercase;
+  letter-spacing: t.tracking(wider);
+}
+
+.name {
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(bold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.chevron {
+  color: rgb(255 255 255 / 0.6);
+  flex-shrink: 0;
+}
+```
+
+## §2.7 — NavLink
+
+### Files
+
+```
+components/layout/NavLink/
+├── NavLink.tsx
+├── NavLink.module.scss
+└── NavLink.types.ts
+```
+
+### `NavLink.types.ts`
+
+```ts
+import type { ReactNode } from 'react';
+
+export interface NavLinkProps {
+  href: string;
+  icon: string;            // Icon name from sprite
+  label: string;
+  active?: boolean;        // controlled by parent based on pathname
+  badgeCount?: number;
+  badgeAlert?: boolean;    // red badge for alerts vs. neutral count
+  children?: ReactNode;
+}
+```
+
+### `NavLink.tsx`
+
+```tsx
+'use client';
+
+import Link from 'next/link';
+import { Icon } from '@/components/primitives/Icon/Icon';
+import { Badge } from '@/components/primitives/Badge/Badge';
+import styles from './NavLink.module.scss';
+import type { NavLinkProps } from './NavLink.types';
+
+export function NavLink({
+  href,
+  icon,
+  label,
+  active = false,
+  badgeCount,
+  badgeAlert = false,
+}: NavLinkProps) {
+  const classes = [styles.link, active && styles.active].filter(Boolean).join(' ');
+
+  return (
+    <Link href={href} className={classes} aria-current={active ? 'page' : undefined}>
+      <Icon name={icon} size="md" className={styles.icon} aria-hidden />
+      <span className={styles.label}>{label}</span>
+      {badgeCount && badgeCount > 0 ? (
+        <Badge tone={badgeAlert ? 'alert' : 'gray'} count={badgeCount} className={styles.badge} />
+      ) : null}
+    </Link>
+  );
+}
+```
+
+### `NavLink.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.link {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  padding: t.space(3);
+  border-radius: t.radius(lg);
+  color: rgb(255 255 255 / 0.7);
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(semibold);
+  transition: t.motion(fast);
+
+  &:hover {
+    background: rgb(255 255 255 / 0.06);
+    color: t.color(white);
+  }
+}
+
+.icon {
+  flex-shrink: 0;
+}
+
+.label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  margin-inline-start: auto;  // RTL-aware
+  flex-shrink: 0;
+}
+
+.active {
+  background: t.color(orange);
+  color: t.color(white);
+  box-shadow: t.shadow(orange);
+  font-weight: t.font-weight(bold);
+
+  &:hover {
+    background: t.color(orange-hover);
+    color: t.color(white);
+  }
+}
+```
+
+## §2.8 — UserWidget
+
+### Files
+
+```
+components/layout/UserWidget/
+├── UserWidget.tsx
+├── UserWidget.module.scss
+└── UserWidget.types.ts
+```
+
+### `UserWidget.types.ts`
+
+```ts
+export interface UserWidgetProps {
+  name: string;
+  role: string;            // display label, e.g. "מנהל ארגון"
+  avatarUrl?: string;
+  className?: string;
+}
+```
+
+### `UserWidget.tsx`
+
+```tsx
+import { Avatar } from '@/components/primitives/Avatar/Avatar';
+import styles from './UserWidget.module.scss';
+import type { UserWidgetProps } from './UserWidget.types';
+
+export function UserWidget({ name, role, avatarUrl, className }: UserWidgetProps) {
+  const classes = [styles.me, className].filter(Boolean).join(' ');
+  return (
+    <div className={classes}>
+      <Avatar name={name} src={avatarUrl} size="base" tone="green" />
+      <div className={styles.body}>
+        <span className={styles.who}>{name}</span>
+        <span className={styles.role}>{role}</span>
+      </div>
+    </div>
+  );
+}
+```
+
+### `UserWidget.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.me {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  padding: t.space(3);
+  background: rgb(255 255 255 / 0.04);
+  border-radius: t.radius(lg);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.who {
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(bold);
+  color: t.color(white);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role {
+  font-size: t.font-size(xs);
+  color: rgb(255 255 255 / 0.6);
+}
+```
+
+## §2.9 — Sidebar
+
+### Files
+
+```
+components/layout/Sidebar/
+├── Sidebar.tsx
+├── Sidebar.module.scss
+└── Sidebar.types.ts
+```
+
+### `Sidebar.types.ts`
+
+```ts
+import type { ReactNode } from 'react';
+
+export interface NavItem {
+  href: string;
+  icon: string;
+  label: string;
+  badgeCount?: number;
+  badgeAlert?: boolean;
+}
+
+export interface SidebarProps {
+  navItems: NavItem[];
+  tenantName: string;
+  tenantLabel?: string;
+  tenantLogoUrl?: string;
+  user: { name: string; role: string; avatarUrl?: string };
+  className?: string;
+  /** Active path; sidebar marks the matching nav item active. */
+  activePath?: string;
+  /** Optional element rendered above the user widget (e.g. tenant settings). */
+  footer?: ReactNode;
+}
+```
+
+### `Sidebar.tsx`
+
+```tsx
+import { BrandMark } from '@/components/layout/BrandMark/BrandMark';
+import { TenantSwitcher } from '@/components/layout/TenantSwitcher/TenantSwitcher';
+import { NavLink } from '@/components/layout/NavLink/NavLink';
+import { UserWidget } from '@/components/layout/UserWidget/UserWidget';
+import styles from './Sidebar.module.scss';
+import type { SidebarProps } from './Sidebar.types';
+
+export function Sidebar({
+  navItems,
+  tenantName,
+  tenantLabel,
+  tenantLogoUrl,
+  user,
+  className,
+  activePath,
+  footer,
+}: SidebarProps) {
+  const classes = [styles.side, className].filter(Boolean).join(' ');
+
+  return (
+    <aside className={classes} aria-label="ניווט ראשי">
+      <div className={styles.head}>
+        <BrandMark size="base" />
+      </div>
+
+      <div className={styles.tenantSlot}>
+        <TenantSwitcher
+          tenantName={tenantName}
+          tenantLabel={tenantLabel}
+          logoUrl={tenantLogoUrl}
+        />
+      </div>
+
+      <nav className={styles.nav}>
+        {navItems.map((item) => (
+          <NavLink
+            key={item.href}
+            href={item.href}
+            icon={item.icon}
+            label={item.label}
+            badgeCount={item.badgeCount}
+            badgeAlert={item.badgeAlert}
+            active={activePath === item.href}
+          />
+        ))}
+      </nav>
+
+      <div className={styles.foot}>
+        {footer}
+        <UserWidget {...user} />
+      </div>
+    </aside>
+  );
+}
+```
+
+### `Sidebar.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.side {
+  display: flex;
+  flex-direction: column;
+  width: 248px;
+  height: 100vh;
+  padding: t.space(5) t.space(4);
+  background: t.color(blue-deep);
+  color: t.color(white);
+  overflow-y: auto;
+  position: sticky;
+  inset-block-start: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  margin-block-end: t.space(5);
+}
+
+.tenantSlot {
+  margin-block-end: t.space(5);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(1);
+  flex: 1;
+}
+
+.foot {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+  padding-block-start: t.space(4);
+  border-block-start: 1px solid rgb(255 255 255 / 0.08);
+}
+```
+
+## §2.10 — Topbar
+
+### Files
+
+```
+components/layout/Topbar/
+├── Topbar.tsx
+├── Topbar.module.scss
+└── Topbar.types.ts
+```
+
+### `Topbar.types.ts`
+
+```ts
+import type { ReactNode } from 'react';
+
+export interface TopbarProps {
+  title: ReactNode;            // page H1
+  subtitle?: ReactNode;
+  actions?: ReactNode;         // typically a Button or row of Buttons
+  /** Mobile-only menu trigger element (e.g. hamburger button) */
+  menuTrigger?: ReactNode;
+  className?: string;
+}
+```
+
+### `Topbar.tsx`
+
+```tsx
+import styles from './Topbar.module.scss';
+import type { TopbarProps } from './Topbar.types';
+
+export function Topbar({ title, subtitle, actions, menuTrigger, className }: TopbarProps) {
+  const classes = [styles.topbar, className].filter(Boolean).join(' ');
+  return (
+    <header className={classes}>
+      <div className={styles.left}>
+        {menuTrigger}
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>{title}</h1>
+          {subtitle ? <p className={styles.subtitle}>{subtitle}</p> : null}
+        </div>
+      </div>
+      {actions ? <div className={styles.actions}>{actions}</div> : null}
+    </header>
+  );
+}
+```
+
+### `Topbar.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: t.space(4);
+  padding: t.space(4) t.space(5);
+  background: t.color(white);
+  border-block-end: 1px solid t.color(border-default);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: t.z(sticky);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(5) t.space(7);
+  }
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  min-width: 0;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.title {
+  font-size: t.font-size(xl);
+  font-weight: t.font-weight(extrabold);
+  color: t.color(ink);
+  line-height: t.leading(tight);
+
+  @include m.from(t.bp(md)) {
+    font-size: t.font-size(2xl);
+  }
+}
+
+.subtitle {
+  font-size: t.font-size(sm);
+  color: t.color(fg-muted);
+  margin-block-start: t.space(1);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: t.space(2);
+  flex-shrink: 0;
+}
+```
+
+## §2.11 — Tabs
+
+### Files
+
+```
+components/layout/Tabs/
+├── Tabs.tsx
+├── Tabs.module.scss
+└── Tabs.types.ts
+```
+
+### `Tabs.types.ts`
+
+```ts
+export interface TabItem {
+  href: string;
+  label: string;
+  badgeCount?: number;
+}
+
+export interface TabsProps {
+  items: TabItem[];
+  activePath?: string;
+  className?: string;
+  ariaLabel?: string;
+}
+```
+
+### `Tabs.tsx`
+
+```tsx
+'use client';
+
+import Link from 'next/link';
+import { Badge } from '@/components/primitives/Badge/Badge';
+import styles from './Tabs.module.scss';
+import type { TabsProps } from './Tabs.types';
+
+export function Tabs({ items, activePath, className, ariaLabel = 'לשוניות' }: TabsProps) {
+  const classes = [styles.tabs, className].filter(Boolean).join(' ');
+
+  return (
+    <nav className={classes} role="tablist" aria-label={ariaLabel}>
+      {items.map((item) => {
+        const active = activePath === item.href;
+        const itemClasses = [styles.tab, active && styles.active].filter(Boolean).join(' ');
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={itemClasses}
+            role="tab"
+            aria-selected={active}
+          >
+            <span>{item.label}</span>
+            {item.badgeCount && item.badgeCount > 0 ? (
+              <Badge tone={active ? 'blue-soft' : 'gray'} count={item.badgeCount} />
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
+```
+
+### `Tabs.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.tabs {
+  display: flex;
+  gap: t.space(1);
+  border-block-end: 1px solid t.color(border-default);
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar { display: none; }
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: t.space(2);
+  padding: t.space(3) t.space(4);
+  color: t.color(fg-muted);
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(semibold);
+  white-space: nowrap;
+  border-block-end: 2px solid transparent;
+  margin-block-end: -1px;
+  transition: t.motion(fast);
+
+  &:hover {
+    color: t.color(blue-deep);
+  }
+}
+
+.active {
+  color: t.color(blue-deep);
+  border-block-end-color: t.color(blue-deep);
+  font-weight: t.font-weight(bold);
+}
+```
+
+## §2.12 — MobileDrawer
+
+A slide-in drawer that wraps the sidebar contents at < `md`. Trigger lives in `Topbar` (`menuTrigger` prop). Drawer is closed by default, opens via state, closes on backdrop click or Escape.
+
+### Files
+
+```
+components/layout/MobileDrawer/
+├── MobileDrawer.tsx
+├── MobileDrawer.module.scss
+└── MobileDrawer.types.ts
+```
+
+### `MobileDrawer.types.ts`
+
+```ts
+import type { ReactNode } from 'react';
+
+export interface MobileDrawerProps {
+  open: boolean;
+  onClose: () => void;
+  ariaLabel?: string;
+  children: ReactNode;
+}
+```
+
+### `MobileDrawer.tsx`
+
+```tsx
+'use client';
+
+import { useEffect } from 'react';
+import styles from './MobileDrawer.module.scss';
+import type { MobileDrawerProps } from './MobileDrawer.types';
+
+export function MobileDrawer({ open, onClose, ariaLabel = 'תפריט', children }: MobileDrawerProps) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = '';
+    };
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className={styles.root} role="dialog" aria-modal="true" aria-label={ariaLabel}>
+      <button
+        type="button"
+        className={styles.backdrop}
+        aria-label="סגור תפריט"
+        onClick={onClose}
+      />
+      <div className={styles.panel}>
+        {children}
+      </div>
+    </div>
+  );
+}
+```
+
+### `MobileDrawer.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.root {
+  position: fixed;
+  inset: 0;
+  z-index: t.z(drawer);
+
+  @include m.from(t.bp(md)) {
+    display: none;  // drawer is mobile-only
+  }
+}
+
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 0.4);
+  border: 0;
+  cursor: pointer;
+}
+
+.panel {
+  position: absolute;
+  inset-block-start: 0;
+  inset-block-end: 0;
+  inset-inline-start: 0;  // RTL: drawer slides in from the right
+  width: 280px;
+  max-width: 85vw;
+  background: t.color(blue-deep);
+  overflow-y: auto;
+  animation: slideIn t.motion(base);
+}
+
+@keyframes slideIn {
+  from { transform: translateX(50%); opacity: 0; }
+  to   { transform: translateX(0);   opacity: 1; }
+}
+```
+
+> **RTL note:** in RTL contexts, `inset-inline-start: 0` resolves to the right edge of the viewport. The drawer enters from the right, which is the user's "start" side. The slide animation is symmetric enough that the same `translateX(50%)` works for both directions; if you find it animates the wrong way, flip the sign.
+
+## §2.13 — AppShell
+
+Top-level layout composing Sidebar (desktop) / MobileDrawer (mobile) + main content area. This is the component each route-group `layout.tsx` will render.
+
+### Files
+
+```
+components/layout/AppShell/
+├── AppShell.tsx
+├── AppShell.module.scss
+└── AppShell.types.ts
+```
+
+### `AppShell.types.ts`
+
+```ts
+import type { ReactNode } from 'react';
+import type { SidebarProps } from '@/components/layout/Sidebar/Sidebar.types';
+
+export interface AppShellProps {
+  /** Sidebar config; same shape Sidebar takes directly. */
+  sidebar: SidebarProps;
+  children: ReactNode;
+}
+```
+
+### `AppShell.tsx`
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { Sidebar } from '@/components/layout/Sidebar/Sidebar';
+import { MobileDrawer } from '@/components/layout/MobileDrawer/MobileDrawer';
+import { Icon } from '@/components/primitives/Icon/Icon';
+import styles from './AppShell.module.scss';
+import type { AppShellProps } from './AppShell.types';
+
+export function AppShell({ sidebar, children }: AppShellProps) {
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  return (
+    <div className={styles.app}>
+      <div className={styles.sidebarDesktop}>
+        <Sidebar {...sidebar} />
+      </div>
+
+      <button
+        type="button"
+        className={styles.menuTrigger}
+        aria-label="פתח תפריט"
+        onClick={() => setDrawerOpen(true)}
+      >
+        <Icon name="menu" size="md" aria-hidden />
+      </button>
+
+      <MobileDrawer open={drawerOpen} onClose={() => setDrawerOpen(false)}>
+        <Sidebar {...sidebar} />
+      </MobileDrawer>
+
+      <main className={styles.main}>
+        {children}
+      </main>
+    </div>
+  );
+}
+```
+
+> The icon name `menu` must exist in `public/icons.svg`. If the closest available is `hamburger`, `bars`, or `more`, use that — don't invent a symbol ID. Verify before assuming `menu` is in the sprite.
+
+### `AppShell.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.app {
+  display: grid;
+  grid-template-columns: 1fr;
+  min-height: 100vh;
+  background: t.color(bg-soft);
+
+  @include m.from(t.bp(md)) {
+    grid-template-columns: 248px 1fr;
+  }
+}
+
+.sidebarDesktop {
+  display: none;
+
+  @include m.from(t.bp(md)) {
+    display: block;
+  }
+}
+
+.menuTrigger {
+  position: fixed;
+  inset-block-start: t.space(3);
+  inset-inline-start: t.space(3);  // RTL: appears on the right
+  z-index: t.z(sticky);
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: t.color(white);
+  border: 1px solid t.color(border-default);
+  border-radius: t.radius(lg);
+  box-shadow: t.shadow(sm);
+  cursor: pointer;
+
+  @include m.from(t.bp(md)) {
+    display: none;  // hidden when sidebar is visible
+  }
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+```
+
+## §2.14 — Demo route
+
+Build a demo entry under `app/(dev)/layout-demo/` so CP-2.5 has a review surface. This mirrors the pattern from Phase 1's primitives demo.
+
+### `app/(dev)/layout-demo/page.tsx`
+
+```tsx
+import { AppShell } from '@/components/layout/AppShell/AppShell';
+import { Topbar } from '@/components/layout/Topbar/Topbar';
+import { Tabs } from '@/components/layout/Tabs/Tabs';
+import { Button } from '@/components/primitives/Button/Button';
+import { Card } from '@/components/primitives/Card/Card';
+import { Icon } from '@/components/primitives/Icon/Icon';
+
+import type { NavItem } from '@/components/layout/Sidebar/Sidebar.types';
+import type { TabItem } from '@/components/layout/Tabs/Tabs.types';
+
+import styles from './page.module.scss';
+
+export const metadata = { title: 'עוז · Layout Demo' };
+
+const NAV: NavItem[] = [
+  { href: '/layout-demo',           icon: 'grid',     label: 'סקירה' },
+  { href: '/layout-demo/properties', icon: 'building', label: 'נכסים', badgeCount: 12 },
+  { href: '/layout-demo/workers',    icon: 'users',    label: 'עובדים' },
+  { href: '/layout-demo/contracts',  icon: 'file-text', label: 'חוזים', badgeCount: 3, badgeAlert: true },
+  { href: '/layout-demo/reports',    icon: 'bar-chart-2', label: 'דוחות' },
+  { href: '/layout-demo/ai-import',  icon: 'sparkles', label: 'ייבוא AI' },
+  { href: '/layout-demo/settings',   icon: 'settings', label: 'הגדרות' },
+];
+
+const TABS: TabItem[] = [
+  { href: '/layout-demo',            label: 'סקירה' },
+  { href: '/layout-demo/properties', label: 'נכסים', badgeCount: 12 },
+  { href: '/layout-demo/workers',    label: 'עובדים' },
+  { href: '/layout-demo/contracts',  label: 'חוזים', badgeCount: 3 },
+  { href: '/layout-demo/reports',    label: 'דוחות' },
+  { href: '/layout-demo/ai-import',  label: 'ייבוא AI' },
+  { href: '/layout-demo/settings',   label: 'הגדרות' },
+];
+
+export default function LayoutDemoPage() {
+  return (
+    <AppShell
+      sidebar={{
+        navItems: NAV,
+        tenantName: 'AM Hostels',
+        tenantLabel: 'ארגון',
+        user: { name: 'אדיר אמסלם', role: 'מנהל ארגון' },
+        activePath: '/layout-demo',
+      }}
+    >
+      <Topbar
+        title="סקירה כללית"
+        subtitle="מבט כולל על הפעילות"
+        actions={
+          <>
+            <Button variant="ghost" iconStart={<Icon name="download" size="sm" />}>
+              ייצא
+            </Button>
+            <Button variant="cta" iconStart={<Icon name="plus" size="sm" />}>
+              הוסף נכס
+            </Button>
+          </>
+        }
+      />
+      <Tabs items={TABS} activePath="/layout-demo" />
+
+      <div className={styles.content}>
+        <Card>
+          <h2>בדיקת AppShell</h2>
+          <p>
+            דף זה הוא משטח הסקירה ל-CP-2.5. במסכי דסקטופ הסרגל הצד מופיע מימין;
+            במסכי מובייל יש כפתור תפריט בפינה ימין-עליון שפותח את הסרגל כ-Drawer.
+          </p>
+        </Card>
+
+        <Card variant="outline">
+          <h3>תרחישי בדיקה</h3>
+          <ul className={styles.list}>
+            <li>בדסקטופ (1280px) — הסרגל מימין, ה-Topbar בולט, הלשוניות מתחתיו, התוכן ממלא את שאר הרוחב.</li>
+            <li>בטאבלט (768px) — הסרגל עדיין מימין, הפדינג מצטמצם.</li>
+            <li>במובייל (375px) — הסרגל נסתר, כפתור תפריט מופיע בפינה ימין-עליון, לחיצה פותחת Drawer.</li>
+            <li>גלילה אופקית של ה-Tabs במובייל — אפשרית, ללא scrollbar גלוי.</li>
+            <li>NavLink פעיל מסומן בכתום; NavLink עם Badge מציג מספר; "חוזים" מציג Badge אדום.</li>
+          </ul>
+        </Card>
+      </div>
+    </AppShell>
+  );
+}
+```
+
+### `app/(dev)/layout-demo/page.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(5);
+  padding: t.space(5);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(7);
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+  padding-inline-start: t.space(5);
+  list-style: disc;
+  color: t.color(fg-muted);
+}
+```
+
+## §2.15 — Self-tests (CP-2.5 gate)
+
+### Test 1 — TypeScript compiles
+
+```bash
+npx tsc --noEmit
+```
+
+PASS iff exit 0.
+
+### Test 2 — Lint passes
+
+```bash
+npm run lint
+```
+
+PASS iff exit 0 (warnings acceptable; errors are not).
+
+### Test 3 — Build passes
+
+```bash
+npm run build
+```
+
+PASS iff exit 0.
+
+### Test 4 — All nine layout components present
+
+```bash
+for c in BrandMark TenantSwitcher NavLink UserWidget Sidebar Topbar Tabs MobileDrawer AppShell; do
+  test -f "components/layout/$c/$c.tsx" || { echo "FAIL: $c.tsx missing"; exit 1; }
+  test -f "components/layout/$c/$c.module.scss" || { echo "FAIL: $c.module.scss missing"; exit 1; }
+  test -f "components/layout/$c/$c.types.ts" || { echo "FAIL: $c.types.ts missing"; exit 1; }
+done
+echo "ALL LAYOUT COMPONENTS PRESENT"
+```
+
+PASS iff loop completes.
+
+### Test 5 — Demo page renders
+
+```bash
+npm run dev > /tmp/oz-dev.log 2>&1 &
+DEV_PID=$!
+sleep 8
+HTTP_CODE=$(curl -s -o /tmp/oz-layout.html -w "%{http_code}" http://localhost:3000/layout-demo)
+kill $DEV_PID 2>/dev/null
+```
+
+PASS iff:
+
+- `HTTP_CODE` = `200`
+- `/tmp/oz-layout.html` contains `lang="he"`, `dir="rtl"`, `סקירה כללית`, and `AM Hostels`
+- `/tmp/oz-dev.log` contains no `Error:` or `Failed to compile` lines
+
+### Test 6 — No raw color values in layout SCSS
+
+```bash
+FOUND=$(grep -rEn '^[^/]*#[0-9a-fA-F]{3,8}\b' components/layout \
+  --include='*.module.scss' \
+  | grep -v '^\s*//' \
+  | grep -v '@use')
+if [ -n "$FOUND" ]; then
+  echo "FAIL: raw color literals in layout SCSS:"
+  echo "$FOUND"
+  exit 1
+fi
+echo "NO RAW COLORS"
+```
+
+PASS iff no hex literals are found. (`rgb(... / opacity)` calls used for translucency on dark backgrounds are acceptable but should be flagged.)
+
+### Test 7 — Icon names used in NAV exist in sprite
+
+```bash
+for icon in grid building users file-text bar-chart-2 sparkles settings menu download plus chevron-down; do
+  grep -q "id=\"i-$icon\"" public/icons.svg \
+    || echo "WARN: icon '$icon' not found in public/icons.svg — verify and substitute closest available"
+done
+echo "ICON CHECK DONE"
+```
+
+This test prints WARNs but does not fail. If any icon is missing, the demo will render an empty `<svg><use>` for that nav item — visible immediately. The user reviewing CP-2.5 will spot it.
+
+### Test 8 — RTL drawer + sticky sidebar smoke
+
+Verify by HTML inspection that the sidebar uses `position: sticky` and that AppShell uses `grid-template-columns: 248px 1fr` at md+. Print the relevant computed styles by extracting class names from the rendered HTML and grepping the compiled CSS (best-effort; OK if cannot be fully automated):
+
+```bash
+grep -E 'position:\s*sticky' components/layout/Sidebar/Sidebar.module.scss
+grep -E 'grid-template-columns' components/layout/AppShell/AppShell.module.scss
+```
+
+PASS iff both grep calls return matches.
+
+## §2.16 — Commit (after user types `continue`)
+
+Stage all new files under `components/layout/` and `app/(dev)/layout-demo/`. Confirm by listing staged files. Commit message:
+
+```
+phase 2: layout & navigation chrome + CP-2.5 demo
+
+- BrandMark (3 sizes)
+- TenantSwitcher (logo + label + name + chevron, dark-on-blue)
+- NavLink (active state, optional Badge with alert tone)
+- UserWidget (avatar + name + role)
+- Sidebar (composes the four above; sticky, blue-deep, 248px)
+- Topbar (sticky, title + subtitle + actions + menu trigger slot)
+- Tabs (horizontal strip, badges, active underline, mobile-scrollable)
+- MobileDrawer (slide-in below md, ESC + backdrop close)
+- AppShell (grid layout: sidebar desktop / drawer mobile, menu trigger)
+
+Demo page at app/(dev)/layout-demo renders the full chrome at three
+breakpoints (375 / 768 / 1280px) for CP-2.5 visual review.
+
+Reaches CP-2.5.
+```
+
+After commit, print the closing checkpoint banner per §F.4 and exit.
 
 ---
 

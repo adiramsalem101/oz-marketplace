@@ -14,10 +14,11 @@ oz-marketplace is a new project inspired by `worker-housing-platform` (legacy). 
 |---|---|---|
 | **CP-1** (this doc) | All decisions in §3, scales in §4, architecture in §5, build sequence in §6 | ✅ locked |
 | **CP-2** | Generated `_tokens.scss`, global stylesheet, scaffolded layout | ✅ passed |
-| **CP-1.5** | All nine primitives reviewed at 375 / 768 / 1280px on the demo page | ⏳ awaits Phase 1 |
+| **CP-1.5** | All nine primitives reviewed at 375 / 768 / 1280px on the demo page | ✅ passed |
+| **CP-2.5** | Layout chrome (Sidebar / Topbar / Tabs / MobileDrawer / AppShell) reviewed at 375 / 768 / 1280px | ⏳ awaits Phase 2 |
 | **CP-3** | Migration SQL run on staging | ⏳ awaits Phase 3 |
 
-CP-2 cleared on 2026-05-04. Phase 1 prompt is ready in `PROMPT_LIBRARY.md`.
+CP-1.5 cleared 2026-05-04. Phase 2 prompt is ready in `PROMPT_LIBRARY.md`.
 
 ---
 
@@ -364,7 +365,9 @@ Each phase is an atomic deliverable to Claude Code. You commit after each phase,
 
 ### Phase 2 — Layout & navigation
 
-`AppShell`, `Sidebar`, `Topbar`, `Tabs`, `BrandMark`. Wires the corporate dashboard chrome.
+`AppShell`, `Sidebar`, `Topbar`, `Tabs`, `BrandMark`, plus supporting components (`TenantSwitcher`, `NavLink`, `UserWidget`, `MobileDrawer`). Wires the corporate dashboard chrome.
+
+**→ Checkpoint CP-2.5.** Visual review of the layout chrome at 375 / 768 / 1280px before auth and dashboard work begins.
 
 ### Phase 3 — Auth & RLS foundation
 
@@ -456,6 +459,7 @@ The fresh `TASKS.md` opens with a phase tracker:
 - [ ] Phase 1 — Primitives
 - [ ] CP-1.5 — Primitives visual review at 375 / 768 / 1280
 - [ ] Phase 2 — Layout & navigation
+- [ ] CP-2.5 — Layout chrome visual review at 375 / 768 / 1280
 - [ ] Phase 3 — Auth & RLS foundation
 - [ ] CP-3 — Migration on staging
 - [ ] Phase 4 — Corporate dashboard
