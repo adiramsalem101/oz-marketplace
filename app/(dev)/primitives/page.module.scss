@@ -1,0 +1,80 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.page {
+  min-height: 100vh;
+  padding: t.space(6);
+  display: flex;
+  flex-direction: column;
+  gap: t.space(8);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(10);
+    max-width: 1280px;
+    margin-inline: auto;
+  }
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+
+  h1 {
+    font-size: t.font-size(3xl);
+  }
+
+  p {
+    color: t.color(fg-muted);
+    font-size: t.font-size(sm);
+  }
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(4);
+  padding: t.space(6);
+  background: t.color(white);
+  border: 1px solid t.color(border-default);
+  border-radius: t.radius(2xl);
+
+  h2 {
+    font-size: t.font-size(xl);
+  }
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+
+  @include m.from(t.bp(md)) {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: t.space(6);
+  }
+}
+
+.rowLabel {
+  font-size: t.font-size(xs);
+  font-weight: t.font-weight(bold);
+  color: t.color(fg-faint);
+  text-transform: uppercase;
+  letter-spacing: t.tracking(wider);
+  min-width: 100px;
+  padding-block-start: t.space(2);
+}
+
+.rowItems {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: t.space(3);
+  flex: 1;
+}
+
+.muted {
+  color: t.color(fg-muted);
+  font-size: t.font-size(sm);
+}

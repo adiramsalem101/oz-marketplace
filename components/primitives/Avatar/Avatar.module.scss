@@ -1,0 +1,27 @@
+@use "@/styles/tokens" as t;
+
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: t.radius(full);
+  font-weight: t.font-weight(bold);
+  color: t.color(fg-on-dark);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.size-sm   { width: 26px; height: 26px; font-size: t.font-size(xs); }
+.size-base { width: 32px; height: 32px; font-size: t.font-size(sm); }
+.size-lg   { width: 44px; height: 44px; font-size: t.font-size(base); }
+
+.tone-green  { background: t.color(green-light); }
+.tone-blue   { background: t.color(blue-light); }
+.tone-orange { background: t.color(orange); }
+.tone-gray   { background: t.color(gray-400); }

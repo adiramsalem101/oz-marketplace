@@ -1,0 +1,53 @@
+@use "@/styles/tokens" as t;
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: t.space(2);
+  padding: t.space(2) t.space(3);
+  border-radius: t.radius(full);
+  background: t.color(white);
+  color: t.color(fg-default);
+  border: 1px solid t.color(border-default);
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(medium);
+  cursor: pointer;
+  transition: t.motion(fast);
+
+  &:hover {
+    border-color: t.color(blue-deep);
+    color: t.color(blue-deep);
+  }
+}
+
+.active {
+  background: t.color(blue-deep);
+  color: t.color(fg-on-dark);
+  border-color: t.color(blue-deep);
+
+  &:hover {
+    color: t.color(fg-on-dark);
+  }
+}
+
+.verified {
+  background: t.color(green-deep);
+  color: t.color(fg-on-dark);
+  border-color: t.color(green-deep);
+
+  &:hover {
+    color: t.color(fg-on-dark);
+  }
+}
+
+.remove {
+  background: none;
+  border: none;
+  padding: 0;
+  font-size: t.font-size(base);
+  line-height: 1;
+  opacity: 0.6;
+  cursor: pointer;
+
+  &:hover { opacity: 1; }
+}

@@ -230,6 +230,11 @@ The legacy docs reference 5 files that don't exist on disk (`BOOKING_SYSTEM_MVP.
 - **2026-05-02 — Phase 0 deviation:** `.gitignore` extended beyond PROMPT_LIBRARY §0.6 with `!.env.example` to override the broader `.env*` rule that would otherwise block the committed template. Intentional; keeps `.env.example` trackable while `.env.local` stays ignored.
 - **2026-05-02 — Phase 0 deviation:** Project README lives at the repo root (`/README.md`), not inside `docs/`, despite BUILD_PLAN §7 listing `docs/README.md`. The root location matches GitHub convention and surfaces the project description on the repo's landing page. BUILD_PLAN §7 should be updated in a later phase to reflect this.
 
+### 2026-05-04 — Phase 1 deviations
+
+- **2026-05-04 — Phase 1 deviation:** Chip is a Client Component (`'use client'` at the top of `Chip.tsx`). Required because Chip binds `onClick` for the optional `onRemove` handler, and Next 16 RSC cannot serialize functions from Server to Client Components. The pattern — "primitives that take event-handler props are Client Components" — applies to most interactive primitives going forward.
+- **2026-05-04 — Phase 1 deviation:** The CP-1.5 demo page at `app/(dev)/primitives/page.tsx` remains a Server Component (preserves the `metadata` export). The interactive `RemovableChipDemo` is extracted to `app/(dev)/primitives/InteractiveChips.tsx` as a `'use client'` island. This is the recommended pattern for any future dev/demo pages that need both metadata and interactivity.
+
 ---
 
 **End of decisions log. Append new entries below this line.**

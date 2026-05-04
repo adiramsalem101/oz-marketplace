@@ -1,0 +1,56 @@
+@use "@/styles/tokens" as t;
+
+.field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: t.space(2);
+}
+
+.fullWidth {
+  display: flex;
+  width: 100%;
+}
+
+.label {
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(semibold);
+  color: t.color(fg-default);
+}
+
+.input {
+  width: 100%;
+  padding: t.space(3) t.space(4);
+  border: 1px solid t.color(border-default);
+  border-radius: t.radius(lg);
+  background: t.color(white);
+  color: t.color(fg-default);
+  font-size: t.font-size(base);
+  transition: t.motion(fast);
+
+  &::placeholder {
+    color: t.color(fg-faint);
+  }
+
+  &:focus {
+    outline: none;
+    border-color: t.color(blue-deep);
+    box-shadow: 0 0 0 3px rgb(27 58 107 / 0.12);
+  }
+
+  &:disabled {
+    background: t.color(gray-100);
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+}
+
+.hint  { font-size: t.font-size(xs); color: t.color(fg-muted); }
+.error { font-size: t.font-size(xs); color: t.color(red-600); }
+
+.invalid .input {
+  border-color: t.color(red-500);
+
+  &:focus {
+    box-shadow: 0 0 0 3px rgb(239 68 68 / 0.18);
+  }
+}

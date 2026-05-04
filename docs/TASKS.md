@@ -22,6 +22,9 @@
 
 ## Done (last 30 days)
 
+## Polish backlog (Phase 8)
+- [ ] Add alpha-aware color token helper. Currently three `rgb(... / opacity)` calls live in primitive SCSS (Pill `red-soft` tone; Input focus + invalid-focus rings) because the token system doesn't yet encode "color X with Y% opacity". Add a token helper or alpha map so these also flow through tokens.
+
 ## Future-roadmap (Phase 9+)
 - [ ] Neema integration (OQ-15)
 - [ ] Virtual tour
