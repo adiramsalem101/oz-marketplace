@@ -235,6 +235,21 @@ The legacy docs reference 5 files that don't exist on disk (`BOOKING_SYSTEM_MVP.
 - **2026-05-04 — Phase 1 deviation:** Chip is a Client Component (`'use client'` at the top of `Chip.tsx`). Required because Chip binds `onClick` for the optional `onRemove` handler, and Next 16 RSC cannot serialize functions from Server to Client Components. The pattern — "primitives that take event-handler props are Client Components" — applies to most interactive primitives going forward.
 - **2026-05-04 — Phase 1 deviation:** The CP-1.5 demo page at `app/(dev)/primitives/page.tsx` remains a Server Component (preserves the `metadata` export). The interactive `RemovableChipDemo` is extracted to `app/(dev)/primitives/InteractiveChips.tsx` as a `'use client'` island. This is the recommended pattern for any future dev/demo pages that need both metadata and interactivity.
 
+### 2026-05-04 — Phase 2 deviations
+
+- **2026-05-04 — Phase 2 deviation:** Six icon names from PROMPT_LIBRARY §Phase 2 had no matching symbol in `public/icons.svg` and were substituted with the closest matches that do exist:
+    - chevron-down → chev-down (TenantSwitcher)
+    - menu         → list (AppShell menu trigger)
+    - file-text    → file (NavLink "חוזים")
+    - bar-chart-2  → chart (NavLink "דוחות")
+    - sparkles     → sparkle (NavLink "ייבוא AI")
+    - settings     → cog (NavLink "הגדרות")
+  The icon sprite was ported verbatim from `worker-housing-platform` brand assets in Phase 0 (56 symbols total); these names existed in the spec text but not in the source sprite. If the original brand intends specific glyphs that aren't yet in the sprite, they can be added to `public/icons.svg` in Phase 8 polish.
+      
+- **2026-05-04 — Phase 2 deviation:** Phase 2 layout components do not pass `aria-hidden` to `<Icon>` elements where decorative. `IconProps` from Phase 1 doesn't extend `HTMLAttributes`, so passing `aria-hidden` would fail `tsc`. The `Icon` primitive auto-applies `aria-hidden` when no `aria-label` is given, so the accessibility behavior is identical. Pattern for future phases: pass `aria-label="..."` for meaningful icons; omit `aria-hidden` for decorative icons (auto-applied by `Icon`).
+
+- **2026-05-04 — Phase 2 deviation:** Reset uses targeted longhand rules, not universal * { margin: 0 }. Universal physical-margin shorthand interacts unpredictably with logical-property longhands like margin-block-end. The targeted-element reset preserves typography control without specificity conflicts.
+
 ---
 
 **End of decisions log. Append new entries below this line.**

@@ -1,0 +1,35 @@
+@use "@/styles/tokens" as t;
+
+.tabs {
+  display: flex;
+  gap: t.space(1);
+  border-block-end: 1px solid t.color(border-default);
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar { display: none; }
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: t.space(2);
+  padding: t.space(3) t.space(4);
+  color: t.color(fg-muted);
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(semibold);
+  white-space: nowrap;
+  border-block-end: 2px solid transparent;
+  margin-block-end: -1px;
+  transition: t.motion(fast);
+
+  &:hover {
+    color: t.color(blue-deep);
+  }
+}
+
+.active {
+  color: t.color(blue-deep);
+  border-block-end-color: t.color(blue-deep);
+  font-weight: t.font-weight(bold);
+}

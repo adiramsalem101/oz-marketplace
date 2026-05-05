@@ -1,0 +1,54 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.topbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: t.space(4);
+  padding: t.space(4) t.space(5);
+  background: t.color(white);
+  border-block-end: 1px solid t.color(border-default);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: t.z(sticky);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(5) t.space(7);
+  }
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  min-width: 0;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.title {
+  font-size: t.font-size(xl);
+  font-weight: t.font-weight(extrabold);
+  color: t.color(ink);
+  line-height: t.leading(tight);
+
+  @include m.from(t.bp(md)) {
+    font-size: t.font-size(2xl);
+  }
+}
+
+.subtitle {
+  font-size: t.font-size(sm);
+  color: t.color(fg-muted);
+  margin-block-start: t.space(1);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: t.space(2);
+  flex-shrink: 0;
+}

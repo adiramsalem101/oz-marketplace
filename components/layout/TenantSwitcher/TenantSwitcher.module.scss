@@ -1,0 +1,64 @@
+@use "@/styles/tokens" as t;
+
+.tenant {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  width: 100%;
+  padding: t.space(3);
+  background: rgb(255 255 255 / 0.06);
+  border: 1px solid rgb(255 255 255 / 0.1);
+  border-radius: t.radius(lg);
+  color: t.color(white);
+  cursor: pointer;
+  transition: t.motion(fast);
+
+  &:hover {
+    background: rgb(255 255 255 / 0.1);
+  }
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: t.radius(md);
+  background: t.color(orange);
+  font-weight: t.font-weight(extrabold);
+  font-size: t.font-size(sm);
+  flex-shrink: 0;
+  overflow: hidden;
+
+  img { width: 100%; height: 100%; object-fit: cover; }
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  flex: 1;
+  min-width: 0;
+}
+
+.label {
+  font-size: t.font-size(xs);
+  color: rgb(255 255 255 / 0.6);
+  text-transform: uppercase;
+  letter-spacing: t.tracking(wider);
+}
+
+.name {
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(bold);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.chevron {
+  color: rgb(255 255 255 / 0.6);
+  flex-shrink: 0;
+}

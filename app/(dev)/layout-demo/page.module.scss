@@ -1,0 +1,22 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(5);
+  padding: t.space(5);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(7);
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+  padding-inline-start: t.space(5);
+  list-style: disc;
+  color: t.color(fg-muted);
+}
