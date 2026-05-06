@@ -3801,7 +3801,11 @@ After commit, print the closing checkpoint banner per §F.4 and exit.
 
 ## §3.1 — Goal
 
-Stand up the database foundation and authentication for oz-marketplace. Local Supabase running via `supabase start`. Two migrations defining the role enum, the profiles table, the persona-aware signup trigger, and the RLS skeleton. Three sign-in methods (Google OAuth, Twilio SMS OTP, email magic-link) on a single sign-in page. A persona-aware sign-up flow that asks "company or individual?" and routes the two paths differently.
+Stand up the database foundation and authentication for oz-marketplace. Local Supabase running via `supabase start`. Two migrations defining the role enum, the profiles table, the persona-aware signup trigger, and the RLS skeleton. Three sign-in methods (Google OAuth, Twilio SMS OTP, email magic-link) on a single sign-in page. A persona-aware sign-up flow that asks "company / construction corporation / individual?" and routes the three paths differently:
+
+- **Company** → creates `owner_company` account (supply side)
+- **Construction corporation** → creates `construction_corporation` account (demand side)
+- **Individual** → friendly "coming soon" message, no account created
 
 This phase ends at **two checkpoints**:
 - **CP-3a** — Database & migrations applied to local Supabase, schema and trigger verified by query.
@@ -3839,18 +3843,18 @@ If any FAIL: halt per §F.5. If WARN: log it and continue.
 
 ## §3.4 — Step 1: Update DECISIONS_LOG and BUILD_PLAN
 
-Before any code or migrations, dump every locked decision from CP-1 through CP-2.5 plus the new Phase 3 decisions into `docs/DECISIONS_LOG.md`. The repo becomes the source of truth; chat history stops being load-bearing.
+Before any code or migrations, dump every locked decision from CP-1 through 2026-05-06 into `docs/DECISIONS_LOG.md`. The repo becomes the source of truth; chat history stops being load-bearing.
 
-Open `docs/DECISIONS_LOG.md`. Find the existing CP-1 section (it should already contain the original decisions from Phase 0). After the existing CP-1 block and any Phase 0 / 1 / 2 deviation subsections, append a new top-level dated section:
+Open `docs/DECISIONS_LOG.md`. Find the existing CP-1 section (it should already contain the original decisions from Phase 0). After the existing CP-1 block and any Phase 0 / 1 / 2 deviation subsections, append two new top-level dated sections:
 
 ```markdown
-## 2026-05-05 — Phase 3 decisions (CP-3 prep)
+## 2026-05-05 — Phase 3 decisions (initial)
 
 ### Auth & roles
 
 - **User role enum SUPERSEDES BUILD_PLAN §3.B original lock.**
   Original (CP-1, 2026-05-02): `('b2c_owner', 'corporate_member', 'b2b_owner', 'admin')`.
-  New (CP-3 prep, 2026-05-05): `('owner_individual', 'owner_company', 'construction_corporation', 'admin')`.
+  New (2026-05-05): `('owner_individual', 'owner_company', 'construction_corporation', 'admin')`.
   Rationale: the B2C/B2B labels were inherited from manager vocabulary but
   misrepresent the product. There is no consumer in oz-marketplace; all three
   non-admin roles are businesses transacting with each other. The new names
@@ -3858,57 +3862,147 @@ Open `docs/DECISIONS_LOG.md`. Find the existing CP-1 section (it should already 
   management company with many listings, and a construction corporation
   on the demand side.
 
-- **Default role at signup: `owner_company`.**
+- **Default role at signup (initial): `owner_company`.**
   MVP day-one launches the supply-side product for property-management
-  companies. Self-serve signup creates `owner_company` accounts.
+  companies. *(Note: superseded 2026-05-06 — `construction_corporation` is also signupable.)*
 
 - **`owner_individual` enum value reserved but unreachable in MVP.**
   Defined in the schema, no signup path leads to it. Activated in a later
   phase when individual-owner self-serve is on the roadmap.
 
-- **`construction_corporation` is admin-invited only.**
-  Created via Supabase Studio by OZ staff. No self-serve signup path.
-  These are high-touch enterprise accounts (e.g., Tnufa, Shikun & Binui)
-  managed by the GTM team.
-
 - **`admin` is OZ staff.** No self-serve signup. Created via Studio.
 
-- **Signup UX is Option C — persona picker before account creation.**
-  Sign-up page asks "האם אתם חברה לניהול נכסים, או פרטיים?" (company or
-  individual). "Company" path proceeds to create an `owner_company`
-  account. "Individual" path renders a "coming soon" message; no account
-  is created and no email is captured.
-
-- **B1 default-to-single-role pattern is locked for MVP.**
+- **B1 default-to-single-role pattern locked for MVP.**
   Self-serve signup writes a fixed role; admins promote to other roles
   via Studio. Future-roadmap entry: build B2/B3 self-serve persona-picker
-  for `construction_corporation` and `owner_individual` once the
-  individual product launches and signup volume warrants it. (Logged in
-  TASKS.md under Future-roadmap.)
+  for `owner_individual` once the individual product launches.
 
 ### Auth methods
 
 - **Three sign-in methods on a single `/sign-in` page:**
   Google OAuth, Twilio SMS OTP, email magic-link. All three handled by
-  Supabase Auth natively. Email/password is intentionally not shipping
-  — magic-link covers the same use case without password storage,
-  reset flows, or "forgot password" UI. Add email/password in Phase 9 if
-  beta feedback requires it.
+  Supabase Auth natively. Email/password is intentionally not shipping —
+  magic-link covers the same use case without password storage, reset
+  flows, or "forgot password" UI.
 
 ### Infrastructure
 
 - **Local Supabase via `supabase start` for development.**
   Docker Desktop and Supabase CLI are required local prerequisites
-  (added to README). Phase 8 (production readiness) provisions the
+  (added to README). Phase 5 (production readiness) provisions the
   remote Supabase project. No fork-and-clean from the legacy project;
-  the schema is authored fresh from BUILD_PLAN §3.B.
+  the schema is authored fresh.
 
 - **`TWILIO_SMS_FROM` is the canonical env var name** for the OTP source
   number. Aligns with the legacy `.env.local`. The Phase 0 `.env.example`
   template used `TWILIO_OTP_FROM_NUMBER`; this is corrected in Phase 3.
+
+---
+
+## 2026-05-06 — MVP scope re-lock + Phase 3 amendments
+
+### MVP scope re-lock
+
+Original BUILD_PLAN had eight phases including a corporate dashboard
+(Phase 4), a B2C marketplace (Phase 5), a native hostel booking engine
+(Phase 6), and integrations (Phase 7). Following business-side direction,
+**MVP is re-scoped to two production-ready surfaces:**
+
+1. **B2B marketplace.** Owner-companies list properties; construction
+   corporations browse, request to book, pay full stay upfront + OZ
+   commission via Pelecard; sign a digital lease via HelloSign.
+2. **Hostels page.** Public route with link-out cards to FrontDeskMaster's
+   hosted booking for the four AM HOSTELS properties.
+
+**Deferred (not in MVP):** corporate dashboard, B2C / individual-owner
+product, native hostel booking engine, yield calculator, AI Import,
+virtual tours, ratings, Tier-3 verification, Neema integration, premium
+listing tiers.
+
+**"Production-ready" means production-ready** — no half-built features
+visible to users in production. Code that's not part of MVP simply
+doesn't exist in the codebase yet. See feature-flag pattern below.
+
+### Phase 3 amendment — `construction_corporation` is signupable
+
+The 2026-05-05 decision said `construction_corporation` would be
+admin-invited only. **Updated 2026-05-06:** `construction_corporation`
+is signupable via the public sign-up form, because the marketplace flow
+requires self-serve corporate signup (a corporation that finds OZ
+through SEO needs to be able to sign up and request a booking without
+waiting for high-touch onboarding).
+
+The sign-up persona picker now offers three options:
+
+1. **"חברה לניהול נכסים"** → creates `owner_company`
+2. **"תאגיד בנייה"** → creates `construction_corporation`
+3. **"פרטיים"** → friendly "coming soon" message; no account created
+
+The `handle_new_user()` trigger accepts both `owner_company` and
+`construction_corporation` from `raw_user_meta_data.role`. Anything
+else (including absent / null / `owner_individual` / `admin`) coerces
+to `owner_company`.
+
+### Feature flag pattern (locked)
+
+A `feature_flags` table is created in Phase 4. Pattern is:
+
+- **Navigation entries** use runtime config flags so the IA can be
+  built holistically (full sidebar) but unbuilt screens stay hidden.
+  Default off in production.
+- **Screens behind unbuilt features** simply don't exist as routes.
+  No `(corporate)/dashboard/page.tsx` returning "coming soon."
+
+This means in MVP production: nav is sparse (only routes that exist),
+and every visible nav entry leads to a real, complete screen.
+
+### Hostels: link-out for MVP, conversion roadmap
+
+The MVP hostels page is **link-out cards** to FrontDeskMaster's hosted
+booking. The four FDM URLs (Jerusalem, Tel Aviv, Haifa, Tiberias) are
+captured in `lib/hostels.ts` as the source of truth.
+
+**Future-roadmap (post-MVP):**
+1. Convert link-out cards to embedded FDM component (requires FDM to
+   expose an embed mechanism — TBD with Mateusz).
+2. Replace embedded FDM with own native booking engine, OR skip the
+   embed step entirely and go directly to native if engineering capacity
+   allows.
+
+Logged in `TASKS.md` Future-roadmap.
+
+### Payments + commission flow (locked)
+
+- **Pelecard Link b'Click for MVP**, full embedded API later. Generates
+  a payment URL, customer pays on Pelecard's hosted page, webhook fires
+  on success. Mirrors the Pakal Nofesh pattern Alon already built.
+- **Money flow A:** OZ takes everything via Pelecard, withholds
+  commission, settles the rest to the owner-company on a manual
+  operations cycle. (Pelecard split-payment to owner is `feature_flags`
+  flagged off and is a future iteration.)
+- **Total amount = (monthly_rent × months) + OZ commission** (5% of
+  rent total). Snapshot stored on the booking row at request time.
+
+### Contract: HelloSign with standardized lease
+
+- HelloSign signature requests sent to both parties when a booking
+  reaches `paid` state.
+- Standardized 12-month residential lease template (Hozeh Shakir Bait
+  Dirah) with OZ-specific clauses for foreign-worker housing.
+- Template stored in `templates/lease.docx` (or HelloSign template ID
+  per env var). Pre-filled with property + booking data.
+- Webhook updates `bookings.status = 'confirmed'` when both parties
+  sign.
+
+### Default homepage (`/`) is the marketplace landing
+
+Per the existing workerhome.co.il pattern: hero + hostels strip +
+listings preview + how-it-works + FAQ + footer. Public, no auth gate
+on browse. Dropped from the existing site for MVP scope: B2C section,
+yield calculator, testimonials, Tier-3 verification badges.
 ```
 
-Then update `docs/BUILD_PLAN.md` §3.B to reflect the new enum values. Find the row for OQ-3 + OQ-4 and replace the enum string. Add a one-line note: *"Superseded 2026-05-05 — see DECISIONS_LOG."* The original decision history stays visible.
+Then update `docs/BUILD_PLAN.md` §3.B to reflect the new enum behavior. The construction_corporation row needs to indicate it's signupable.
 
 ## §3.5 — Step 2: Update README.md prerequisites
 
@@ -4002,9 +4096,10 @@ CREATE TRIGGER profiles_set_updated_at
 -- handle_new_user(): persona-aware. Reads role from raw_user_meta_data.role
 -- (set during signup by app/(auth)/sign-up flow), defaults to 'owner_company'
 -- if not provided. Validates that the requested role is signupable —
--- 'owner_individual', 'construction_corporation', and 'admin' are NEVER
--- assignable via signup; if requested, the trigger silently coerces to the
--- default. Promotion to those roles is admin-only via Studio.
+-- only 'owner_company' and 'construction_corporation' can be assigned via
+-- signup. 'owner_individual' and 'admin' are NEVER assignable via signup;
+-- if requested, the trigger silently coerces to the default 'owner_company'.
+-- Promotion to those roles is admin-only via Studio.
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -4017,12 +4112,14 @@ DECLARE
 BEGIN
   requested_role := NEW.raw_user_meta_data ->> 'role';
 
-  -- Only 'owner_company' is signupable in MVP.
-  -- Anything else (including null / absent) coerces to the default.
+  -- Two roles are signupable in MVP: owner_company (supply) and
+  -- construction_corporation (demand). Anything else coerces to default.
   IF requested_role = 'owner_company' THEN
     final_role := 'owner_company';
+  ELSIF requested_role = 'construction_corporation' THEN
+    final_role := 'construction_corporation';
   ELSE
-    final_role := 'owner_company';
+    final_role := 'owner_company';  -- default
   END IF;
 
   INSERT INTO public.profiles (id, role, email, phone, full_name)
@@ -4043,12 +4140,12 @@ CREATE TRIGGER on_auth_user_created
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
 
-COMMENT ON TYPE public.user_role IS 'User role enum. See docs/DECISIONS_LOG.md 2026-05-05 for semantics.';
+COMMENT ON TYPE public.user_role IS 'User role enum. See docs/DECISIONS_LOG.md 2026-05-05 + 2026-05-06 for semantics.';
 COMMENT ON TABLE public.profiles IS 'One row per auth.users row, created by handle_new_user trigger.';
-COMMENT ON FUNCTION public.handle_new_user() IS 'Trigger that creates a profiles row on auth.users INSERT. Coerces role to owner_company in MVP.';
+COMMENT ON FUNCTION public.handle_new_user() IS 'Creates a profiles row on auth.users INSERT. Two roles signupable in MVP: owner_company, construction_corporation. owner_individual and admin always coerce to default.';
 ```
 
-> **Note on the trigger logic:** the `IF/ELSE` branches both assign `'owner_company'`. This is intentional — it documents that we *considered* the requested role and chose to ignore it. When the next phase opens up `owner_individual` self-serve, the IF branch becomes meaningful and we'll add an ELSIF for `'owner_individual'`. Keeping the structure now means the future change is one ELSIF, not a rewrite.
+> **Note on the trigger logic:** the IF/ELSIF/ELSE structure is explicit about which roles are signupable. When `owner_individual` self-serve launches in a future phase, we add one more ELSIF — no rewrite.
 
 ## §3.8 — Step 5: Migration #2 — RLS skeleton
 
@@ -4162,10 +4259,40 @@ WHERE u.email = 'test-coerce@example.com';
 
 PASS iff result is `owner_company` — the trigger ignored the malicious `admin` request and coerced to default.
 
+### Test 6b — Trigger accepts construction_corporation as signupable
+
+```bash
+supabase db query "
+INSERT INTO auth.users (id, email, encrypted_password, raw_user_meta_data)
+VALUES (gen_random_uuid(), 'test-corp@example.com', '', '{\"role\":\"construction_corporation\"}'::jsonb);
+
+SELECT p.role FROM public.profiles p
+JOIN auth.users u ON u.id = p.id
+WHERE u.email = 'test-corp@example.com';
+"
+```
+
+PASS iff result is `construction_corporation` — the trigger accepted the legitimate construction_corporation request.
+
+### Test 6c — Trigger coerces owner_individual to default
+
+```bash
+supabase db query "
+INSERT INTO auth.users (id, email, encrypted_password, raw_user_meta_data)
+VALUES (gen_random_uuid(), 'test-indiv@example.com', '', '{\"role\":\"owner_individual\"}'::jsonb);
+
+SELECT p.role FROM public.profiles p
+JOIN auth.users u ON u.id = p.id
+WHERE u.email = 'test-indiv@example.com';
+"
+```
+
+PASS iff result is `owner_company` — the trigger coerced the unreachable `owner_individual` to the default.
+
 ### Test 7 — Cleanup
 
 ```bash
-supabase db query "DELETE FROM auth.users WHERE email IN ('test-cp3a@example.com', 'test-coerce@example.com');"
+supabase db query "DELETE FROM auth.users WHERE email IN ('test-cp3a@example.com', 'test-coerce@example.com', 'test-corp@example.com', 'test-indiv@example.com');"
 ```
 
 Should run without error.
@@ -4581,15 +4708,17 @@ import { useState } from 'react';
 import { Button } from '@/components/primitives/Button/Button';
 import { Card } from '@/components/primitives/Card/Card';
 import { SignUpCompany } from './SignUpCompany';
+import { SignUpCorporation } from './SignUpCorporation';
 import { SignUpIndividualSoon } from './SignUpIndividualSoon';
 import styles from './page.module.scss';
 
-type Persona = null | 'company' | 'individual';
+type Persona = null | 'company' | 'corporation' | 'individual';
 
 export default function SignUpPage() {
   const [persona, setPersona] = useState<Persona>(null);
 
   if (persona === 'company') return <SignUpCompany onBack={() => setPersona(null)} />;
+  if (persona === 'corporation') return <SignUpCorporation onBack={() => setPersona(null)} />;
   if (persona === 'individual') return <SignUpIndividualSoon onBack={() => setPersona(null)} />;
 
   return (
@@ -4602,6 +4731,9 @@ export default function SignUpPage() {
       <div className={styles.choices}>
         <Button variant="cta" fullWidth onClick={() => setPersona('company')}>
           חברה לניהול נכסים
+        </Button>
+        <Button variant="cta" fullWidth onClick={() => setPersona('corporation')}>
+          תאגיד בנייה
         </Button>
         <Button variant="ghost" fullWidth onClick={() => setPersona('individual')}>
           אני בעל נכס פרטי
@@ -4772,6 +4904,86 @@ export function SignUpCompany({ onBack }: { onBack: () => void }) {
 }
 ```
 
+### `app/(auth)/sign-up/SignUpCorporation.tsx`
+
+Same structure as `SignUpCompany.tsx`, but writes `role: 'construction_corporation'` to user metadata.
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/primitives/Button/Button';
+import { Card } from '@/components/primitives/Card/Card';
+import { Input } from '@/components/primitives/Input/Input';
+import { createBrowserClient } from '@/lib/supabase/browser';
+import styles from './SignUpCompany.module.scss';  // reuse styles
+
+export function SignUpCorporation({ onBack }: { onBack: () => void }) {
+  const supabase = createBrowserClient();
+  const [email, setEmail] = useState('');
+  const [corporationName, setCorporationName] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'sent' | string>('idle');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !corporationName) return;
+    setStatus('loading');
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        data: { role: 'construction_corporation', full_name: corporationName },
+        emailRedirectTo: `${window.location.origin}/callback`,
+      },
+    });
+    if (error) setStatus(error.message);
+    else setStatus('sent');
+  }
+
+  if (status === 'sent') {
+    return (
+      <Card variant="elevated" className={styles.card}>
+        <h2>בדקו את המייל</h2>
+        <p>שלחנו קישור הפעלה ל-{email}</p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card variant="elevated" className={styles.card}>
+      <header className={styles.header}>
+        <h1>חשבון תאגיד בנייה</h1>
+      </header>
+      <form onSubmit={handleSubmit} className={styles.form}>
+        <Input
+          label="שם התאגיד"
+          placeholder="לדוגמה: בנייני הצפון בע״מ"
+          value={corporationName}
+          onChange={(e) => setCorporationName(e.target.value)}
+          fullWidth
+        />
+        <Input
+          type="email"
+          label="מייל"
+          placeholder="contact@corporation.co.il"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          fullWidth
+        />
+        <Button type="submit" variant="cta" fullWidth disabled={!email || !corporationName || status === 'loading'}>
+          המשך
+        </Button>
+        <Button type="button" variant="ghost" fullWidth onClick={onBack}>
+          חזרה
+        </Button>
+        {typeof status === 'string' && status !== 'idle' && status !== 'loading' && status !== 'sent' ? (
+          <p className={styles.error}>{status}</p>
+        ) : null}
+      </form>
+    </Card>
+  );
+}
+```
+
 ### `app/(auth)/sign-up/SignUpIndividualSoon.tsx`
 
 ```tsx
@@ -4867,15 +5079,25 @@ export async function POST(request: NextRequest) {
 }
 ```
 
-## §3.13 — Step 10: TASKS.md future-roadmap entry
+## §3.13 — Step 10: TASKS.md future-roadmap entries
 
-Open `docs/TASKS.md`. Add to the "Future-roadmap (Phase 9+)" section:
+Open `docs/TASKS.md`. Replace the existing "Future-roadmap" section with the full list from BUILD_PLAN.md (the latest version reflects the MVP re-scope):
 
 ```markdown
-- [ ] B2/B3 self-serve persona-picker for sign-up (DECISIONS_LOG 2026-05-05).
-      Activate `owner_individual` self-serve when individual-product launches.
-      Add `construction_corporation` self-serve if/when GTM model shifts away
-      from high-touch invitation.
+## Future-roadmap (post-MVP)
+- [ ] **Hostels: convert link-out to embedded FDM component** (DECISIONS_LOG 2026-05-06)
+- [ ] **Hostels: replace embedded FDM with own native booking engine** (or skip embed and go straight to native if engineering capacity allows)
+- [ ] B2/B3 self-serve persona-picker — activate `owner_individual` self-serve when individual product launches
+- [ ] Corporate dashboard (KPIs, AI Import, Excel reports, role-based corporate permissions, bulk worker upload)
+- [ ] Yield calculator
+- [ ] Ratings & reviews
+- [ ] Tier-3 verification (paid on-site inspection)
+- [ ] Virtual tours
+- [ ] Neema integration (OQ-15)
+- [ ] Premium listing tiers / featured placement
+- [ ] Pelecard split-payment to owner (currently feature_flags.booking.split_payment = false; manual settlement in MVP)
+- [ ] Pelecard full embedded API (replaces Link b'Click)
+- [ ] Other items from docs/specs/dreams/
 ```
 
 ## §3.14 — CP-3b self-tests (auth UI)
@@ -4941,21 +5163,29 @@ echo "PASS"
 
 ### Test G — End-to-end signup smoke (via service role)
 
-A real OAuth/OTP flow can't be automated easily, so verify the trigger end-to-end via direct Supabase client call:
+A real OAuth/OTP flow can't be automated easily, so verify the trigger end-to-end via direct Supabase client call. Two flows to verify: `owner_company` and `construction_corporation`.
 
 ```bash
-# Use service role to insert an auth.users row with role meta-data,
-# then verify a profiles row was created with role = 'owner_company'.
+# owner_company smoke
 supabase db query "
 INSERT INTO auth.users (id, email, encrypted_password, raw_user_meta_data)
-VALUES (gen_random_uuid(), 'cp3b-smoke@example.com', '', '{\"role\":\"owner_company\",\"full_name\":\"Test Co\"}'::jsonb);
+VALUES (gen_random_uuid(), 'cp3b-smoke-co@example.com', '', '{\"role\":\"owner_company\",\"full_name\":\"Test Co\"}'::jsonb);
 
 SELECT role, full_name FROM public.profiles
-WHERE email = 'cp3b-smoke@example.com';
+WHERE email = 'cp3b-smoke-co@example.com';
+"
+
+# construction_corporation smoke
+supabase db query "
+INSERT INTO auth.users (id, email, encrypted_password, raw_user_meta_data)
+VALUES (gen_random_uuid(), 'cp3b-smoke-corp@example.com', '', '{\"role\":\"construction_corporation\",\"full_name\":\"Test Corp\"}'::jsonb);
+
+SELECT role, full_name FROM public.profiles
+WHERE email = 'cp3b-smoke-corp@example.com';
 "
 ```
 
-PASS iff result row has `owner_company` and `Test Co`.
+PASS iff first query returns `owner_company` / `Test Co` and second returns `construction_corporation` / `Test Corp`.
 
 ### Test H — RLS denies unauthenticated SELECT
 
@@ -4969,7 +5199,7 @@ PASS iff result is `0` (RLS hides every row from anon).
 ### Test I — Cleanup
 
 ```bash
-supabase db query "DELETE FROM auth.users WHERE email = 'cp3b-smoke@example.com';"
+supabase db query "DELETE FROM auth.users WHERE email IN ('cp3b-smoke-co@example.com', 'cp3b-smoke-corp@example.com');"
 ```
 
 Should run without error.
@@ -4983,12 +5213,15 @@ phase 3: auth & RLS foundation
 
 CP-3a — Database
 - supabase/migrations/20260505000001_user_role_and_profiles.sql
-  (user_role enum, profiles table, persona-aware handle_new_user trigger)
+  (user_role enum, profiles table, persona-aware handle_new_user trigger
+   accepting both owner_company and construction_corporation)
 - supabase/migrations/20260505000002_profiles_rls.sql
   (RLS skeleton: select-own, update-own-without-role-change, insert via trigger only)
-- DECISIONS_LOG: enum supersession, owner_company default, B1 lock,
-  Option C signup UX
-- BUILD_PLAN §3.B updated with new enum
+- DECISIONS_LOG: enum supersession, three-persona signup, B1 lock,
+  MVP scope re-lock, feature-flag pattern, hostels link-out policy,
+  payments + commission flow, contract via HelloSign
+- BUILD_PLAN §3.B updated; §3.F (MVP scope), §3.G (feature flags),
+  §3.H (TWILIO_SMS_FROM) added
 - README prerequisites: Docker, Supabase CLI
 
 CP-3b — Auth UI
@@ -4996,8 +5229,10 @@ CP-3b — Auth UI
 - middleware.ts — refreshes session cookies
 - app/(auth)/sign-in — three methods on a single page
   (Google OAuth + email magic-link + Twilio SMS OTP)
-- app/(auth)/sign-up — persona picker; company creates owner_company
-  account, individual sees "coming soon"
+- app/(auth)/sign-up — three-persona picker:
+  • "company" creates owner_company
+  • "construction_corporation" creates construction_corporation
+  • "individual" shows "coming soon" message, no account created
 - app/(auth)/callback — OAuth + magic-link code exchange
 - app/(auth)/sign-out — POST handler
 
@@ -5008,64 +5243,1689 @@ Print closing checkpoint banner and exit.
 
 ---
 
-# §Phase 4 — Corporate dashboard (B2B)
+# §Phase 4 — Marketplace + booking flow + hostels page
 
-**Status:** stubbed.
+## §4.1 — Goal
 
-**Goal:** Build the 7-tab corporate dashboard from `corporate_assets_full.html`. KPI cards, activity feed, charts, alert strips, AI banner shell.
+Build the entire MVP product surface end-to-end. By the end of Phase 4, the following user journey works on local Supabase from start to finish:
 
-**Deliverables:** Migration for the corporate schema (companies, properties, workers, contracts, reports). Pages under `app/(corporate)/`. `docs/specs/B2B_MVP.md` and `DEMAND_SIDE.md` filled (porting from legacy specs with paths/URLs corrected).
+1. **Anonymous visitor** lands on `/`, sees a hero, a hostels strip, a listings preview, a how-it-works section, and a footer
+2. Clicks **"חפש נכס מתאים"** → arrives at `/listings` (public marketplace browse)
+3. Filters by city, capacity, price → clicks a listing → arrives at `/listings/[id]`
+4. Wants to book → clicks **"בקשו לשריין"** → prompted to sign in or sign up
+5. Signs up as a `construction_corporation` → returns to listing detail
+6. Submits a booking request with date range and number of workers
+7. **Owner-company** receives email notification, logs in, accepts the request from their bookings list
+8. **System generates a Pelecard Link b'Click** for `(monthly_rent × months) + OZ commission` and emails it to the corporation
+9. Corporation pays through Pelecard checkout
+10. Webhook fires → booking moves to `paid`
+11. **System sends HelloSign signature request** to both parties with the standardized lease template, pre-filled with property and booking data
+12. Both sign → webhook fires → booking moves to `confirmed` → contact details revealed in both parties' UI
+13. Corporation can also access `/hostels` to book a hostel via the FrontDeskMaster link-out cards (no auth, no on-platform booking — leaves the site)
+
+This is a **lot**. Phase 4 has three checkpoints to make the work reviewable in chunks.
+
+## §4.2 — Three checkpoints
+
+| Checkpoint | Scope | Halt point |
+|---|---|---|
+| **CP-4a** | Listings schema + RLS + `feature_flags` + listing-management UI for owner-companies | An `owner_company` user can publish a complete listing end-to-end on local Supabase. No public browse yet. |
+| **CP-4b** | Public homepage + marketplace browse + listing detail + hostels page + booking-request schema | A `construction_corporation` user can submit a booking request. No payment, no contract — request just sits in `requested` state. |
+| **CP-4c** | Pelecard Link b'Click + HelloSign + Resend + booking lifecycle | Full request → accept → pay → contract → confirmed flow works end-to-end on local Supabase with test credentials. |
+
+After CP-4a, halt and wait for `continue`. After CP-4b, halt and wait for `continue`. After CP-4c, halt for the user to commit and run end-to-end smoke before closing the phase.
+
+## §4.3 — Inputs
+
+- `docs/BUILD_PLAN.md` §3.F (MVP scope), §3.G (feature flags), §6 (build sequence)
+- `docs/PROMPT_LIBRARY.md` front-matter (§F.1–§F.6)
+- `docs/DECISIONS_LOG.md` 2026-05-06 entries
+- The current `workerhome.co.il` homepage as a structural reference for the public homepage (sections, hero, hostels strip, how-it-works, FAQ — but **drop** B2C/calculator/testimonials per MVP scope)
+- `recon/06-legacy-schema.md` for shape inspiration only (not verbatim)
+- Phase 1 primitives + Phase 2 layout components (reused throughout)
+- `lib/supabase/server.ts` and `lib/supabase/browser.ts` from Phase 3
+
+## §4.4 — Pre-flight checks
+
+```bash
+test "$(basename "$PWD")" = "oz-marketplace" || { echo "FAIL: not in oz-marketplace"; exit 1; }
+git log --oneline | grep -q "phase 3" || { echo "FAIL: phase 3 commit not found"; exit 1; }
+git diff --quiet || { echo "FAIL: working tree dirty"; exit 1; }
+docker info > /dev/null 2>&1 || { echo "FAIL: Docker daemon not running"; exit 1; }
+test -f lib/supabase/server.ts || { echo "FAIL: phase 3 supabase clients missing"; exit 1; }
+
+# Local Supabase running?
+curl -s http://127.0.0.1:54321/rest/v1/ > /dev/null || { echo "FAIL: local Supabase not running. Run 'supabase start'."; exit 1; }
+
+echo "PRE-FLIGHT OK"
+```
+
+If any FAIL: halt per §F.5.
 
 ---
 
-# §Phase 5 — Marketplace (B2C)
+## §4.5 — CP-4a: Listings schema + management UI
 
-**Status:** stubbed.
+### Step 1 — Migrations
 
-**Goal:** Build the public marketplace from `marketplace_ui_kit.html`. Hero, search bar, listing cards, trust band, filters. Owner onboarding KYC steps. Property publication wizard.
+Create `supabase/migrations/20260506000001_listings_schema.sql`:
 
-**Deliverables:** Migration for the listings/owner schema. Pages under `app/(marketplace)/`. `docs/specs/B2C_MVP.md` filled.
+```sql
+-- ─────────────────────────────────────────────────────────────────
+-- Migration 20260506000001 — listings, listing_images, feature_flags
+-- ─────────────────────────────────────────────────────────────────
+
+-- Verification level smallint per BUILD_PLAN §3.B (OQ-6).
+-- 1 = self-reported, 2 = remote attestation, 3 = on-site (deferred).
+-- MVP only ships levels 1 and 2.
+
+CREATE TYPE public.listing_status AS ENUM (
+  'draft',       -- Owner is still editing; not visible publicly
+  'published',   -- Live on marketplace
+  'archived'     -- Withdrawn by owner; not visible publicly
+);
+
+CREATE TABLE public.listings (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id            uuid NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  status              public.listing_status NOT NULL DEFAULT 'draft',
+  verification_level  smallint NOT NULL DEFAULT 1 CHECK (verification_level IN (1, 2, 3)),
+
+  -- Display
+  title               text NOT NULL,
+  description         text,
+
+  -- Location
+  city                text NOT NULL,
+  street              text,
+  street_number       text,
+
+  -- Capacity & pricing
+  bed_count           smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 50),
+  monthly_rent_per_bed integer NOT NULL CHECK (monthly_rent_per_bed > 0),  -- in ILS, no decimals
+
+  -- Amenities (extensible; add columns as we discover requirements)
+  area_sqm            integer,
+  bathroom_count      smallint,
+  has_kitchen         boolean NOT NULL DEFAULT true,
+  has_wifi            boolean NOT NULL DEFAULT false,
+  has_parking         boolean NOT NULL DEFAULT false,
+
+  -- Audit
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+  published_at        timestamptz
+);
+
+CREATE INDEX listings_owner_idx ON public.listings(owner_id);
+CREATE INDEX listings_status_idx ON public.listings(status);
+CREATE INDEX listings_city_idx ON public.listings(city);
+CREATE INDEX listings_published_idx ON public.listings(status, published_at DESC) WHERE status = 'published';
+
+CREATE TRIGGER listings_set_updated_at
+  BEFORE UPDATE ON public.listings
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+-- Listing images. Stored in Supabase Storage (bucket: 'listing-images'),
+-- this table holds the path + display order.
+CREATE TABLE public.listing_images (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  listing_id    uuid NOT NULL REFERENCES public.listings(id) ON DELETE CASCADE,
+  storage_path  text NOT NULL,
+  display_order smallint NOT NULL DEFAULT 0,
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX listing_images_listing_idx ON public.listing_images(listing_id, display_order);
+
+-- Feature flags table per BUILD_PLAN §3.G.
+-- Read at the server boundary; admin-only mutation via Studio.
+CREATE TABLE public.feature_flags (
+  key   text PRIMARY KEY,
+  value boolean NOT NULL DEFAULT false,
+  notes text
+);
+
+INSERT INTO public.feature_flags (key, value, notes) VALUES
+  ('nav.dashboard',     false, 'Corporate dashboard nav entry. Off in MVP — feature deferred.'),
+  ('nav.calculator',    false, 'Yield calculator nav entry. Off in MVP — feature deferred.'),
+  ('nav.individual_signup', false, 'Self-serve signup for owner_individual. Off in MVP.'),
+  ('listing.tier3_verification', false, 'Tier-3 paid on-site verification. Off in MVP.'),
+  ('listing.virtual_tour', false, 'Virtual tour upload. Off in MVP.'),
+  ('booking.split_payment', false, 'Pelecard split-payment to owner. Off in MVP — manual settlement.');
+
+COMMENT ON TABLE public.listings IS 'Listings posted by owner_company users. See BUILD_PLAN §3.F for MVP scope.';
+COMMENT ON TABLE public.feature_flags IS 'Runtime config flags. Read at server boundary, cached per request. See BUILD_PLAN §3.G.';
+```
+
+### Step 2 — RLS for listings
+
+Create `supabase/migrations/20260506000002_listings_rls.sql`:
+
+```sql
+ALTER TABLE public.listings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.listing_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.feature_flags ENABLE ROW LEVEL SECURITY;
+
+-- LISTINGS
+-- Public can SELECT only published listings.
+CREATE POLICY "listings_select_published"
+  ON public.listings
+  FOR SELECT
+  TO anon, authenticated
+  USING (status = 'published');
+
+-- Owner can SELECT their own listings (any status).
+CREATE POLICY "listings_select_own"
+  ON public.listings
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = owner_id);
+
+-- Owner-companies can INSERT listings owned by themselves.
+CREATE POLICY "listings_insert_own_owner_company"
+  ON public.listings
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    auth.uid() = owner_id
+    AND (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'owner_company'
+  );
+
+-- Owner can UPDATE their own listings.
+CREATE POLICY "listings_update_own"
+  ON public.listings
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = owner_id)
+  WITH CHECK (auth.uid() = owner_id);
+
+-- Owner can DELETE their own listings (or use 'archived' status).
+CREATE POLICY "listings_delete_own"
+  ON public.listings
+  FOR DELETE
+  TO authenticated
+  USING (auth.uid() = owner_id);
+
+-- LISTING_IMAGES
+-- Public can SELECT images of published listings only.
+CREATE POLICY "listing_images_select_published"
+  ON public.listing_images
+  FOR SELECT
+  TO anon, authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.listings l
+      WHERE l.id = listing_id AND l.status = 'published'
+    )
+  );
+
+-- Owner can SELECT their own listing images.
+CREATE POLICY "listing_images_select_own"
+  ON public.listing_images
+  FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.listings l
+      WHERE l.id = listing_id AND l.owner_id = auth.uid()
+    )
+  );
+
+-- Owner can INSERT/UPDATE/DELETE images of their own listings.
+CREATE POLICY "listing_images_modify_own"
+  ON public.listing_images
+  FOR ALL
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.listings l
+      WHERE l.id = listing_id AND l.owner_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM public.listings l
+      WHERE l.id = listing_id AND l.owner_id = auth.uid()
+    )
+  );
+
+-- FEATURE_FLAGS
+-- Anyone authenticated can read flags. Mutation via service role only.
+CREATE POLICY "feature_flags_select_all"
+  ON public.feature_flags
+  FOR SELECT
+  TO anon, authenticated
+  USING (true);
+```
+
+### Step 3 — Storage bucket for listing images
+
+Create `supabase/migrations/20260506000003_listing_images_storage.sql`:
+
+```sql
+-- Bucket for listing images. Public read (anon can fetch any image
+-- whose listing is published; URLs are signed regardless for cache control).
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('listing-images', 'listing-images', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage RLS: only authenticated owner_company users can upload to
+-- paths under their own UUID prefix.
+CREATE POLICY "listing_images_upload_own"
+  ON storage.objects
+  FOR INSERT
+  TO authenticated
+  WITH CHECK (
+    bucket_id = 'listing-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+    AND (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'owner_company'
+  );
+
+CREATE POLICY "listing_images_select_public"
+  ON storage.objects
+  FOR SELECT
+  TO anon, authenticated
+  USING (bucket_id = 'listing-images');
+
+CREATE POLICY "listing_images_delete_own"
+  ON storage.objects
+  FOR DELETE
+  TO authenticated
+  USING (
+    bucket_id = 'listing-images'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+```
+
+### Step 4 — Apply and verify
+
+```bash
+supabase db reset
+```
+
+Confirm the three new migrations apply cleanly. Run these self-tests:
+
+```bash
+# Tables exist
+supabase db query "SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename IN ('listings','listing_images','feature_flags');"
+
+# Enum exists
+supabase db query "SELECT unnest(enum_range(NULL::public.listing_status));"
+
+# RLS is on
+supabase db query "SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('listings','listing_images','feature_flags');"
+
+# Default flags seeded
+supabase db query "SELECT count(*) FROM public.feature_flags;"
+
+# Storage bucket exists
+supabase db query "SELECT id FROM storage.buckets WHERE id='listing-images';"
+```
+
+PASS iff: three rows from tables; three enum values; all three `relrowsecurity = t`; flag count ≥ 6; bucket exists.
+
+### Step 5 — Owner-company listing management UI
+
+Create the route group `app/(owner)/` with these files:
+
+```
+app/(owner)/
+├── layout.tsx                        # Auth-gated; reuses AppShell with owner-specific nav
+├── layout.module.scss
+├── listings/
+│   ├── page.tsx                      # "My listings" — table view
+│   ├── page.module.scss
+│   ├── new/
+│   │   ├── page.tsx                  # Create form
+│   │   └── page.module.scss
+│   └── [id]/
+│       ├── page.tsx                  # Edit form
+│       └── page.module.scss
+└── _components/
+    ├── ListingForm.tsx               # Shared form, used by new + edit
+    ├── ListingForm.module.scss
+    ├── ListingForm.types.ts
+    ├── ListingsTable.tsx
+    └── ListingsTable.module.scss
+```
+
+**`app/(owner)/layout.tsx`** — auth gate + AppShell with owner-specific nav:
+
+```tsx
+import { redirect } from 'next/navigation';
+import { createServerClient } from '@/lib/supabase/server';
+import { AppShell } from '@/components/layout/AppShell/AppShell';
+import { getFeatureFlags } from '@/lib/feature-flags';
+import { buildOwnerNav } from './nav';
+
+export default async function OwnerLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) redirect('/sign-in?next=/listings');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role, full_name')
+    .eq('id', user.id)
+    .single();
+
+  if (!profile || profile.role !== 'owner_company') {
+    redirect('/');  // Wrong role; bounce to homepage.
+  }
+
+  const flags = await getFeatureFlags();
+  const navItems = buildOwnerNav(flags);
+
+  return (
+    <AppShell
+      sidebar={{
+        navItems,
+        tenantName: profile.full_name ?? 'החברה שלי',
+        user: { name: profile.full_name ?? '', role: 'בעל נכסים' },
+        activePath: '/listings',
+      }}
+    >
+      {children}
+    </AppShell>
+  );
+}
+```
+
+**`app/(owner)/nav.ts`** — feature-flag-aware nav builder:
+
+```ts
+import type { NavItem } from '@/components/layout/Sidebar/Sidebar.types';
+import type { FeatureFlags } from '@/lib/feature-flags';
+
+export function buildOwnerNav(flags: FeatureFlags): NavItem[] {
+  const items: NavItem[] = [
+    { href: '/listings', icon: 'building', label: 'הנכסים שלי' },
+    { href: '/bookings/owner', icon: 'file', label: 'בקשות הזמנה' },
+  ];
+
+  if (flags['nav.dashboard']) {
+    items.unshift({ href: '/dashboard', icon: 'grid', label: 'סקירה' });
+  }
+
+  if (flags['nav.calculator']) {
+    items.push({ href: '/calculator', icon: 'chart', label: 'מחשבון תשואה' });
+  }
+
+  return items;
+}
+```
+
+**`lib/feature-flags.ts`** — server-side flag reader with per-request cache:
+
+```ts
+import 'server-only';
+import { cache } from 'react';
+import { createServerClient } from '@/lib/supabase/server';
+
+export type FeatureFlags = Record<string, boolean>;
+
+/**
+ * Read all feature flags. Cached per server request via React's cache().
+ * Read once per request — admin-only mutations from Studio are reflected
+ * on the next request boundary.
+ */
+export const getFeatureFlags = cache(async (): Promise<FeatureFlags> => {
+  const supabase = await createServerClient();
+  const { data, error } = await supabase
+    .from('feature_flags')
+    .select('key, value');
+
+  if (error) {
+    console.error('[feature-flags] Failed to load:', error);
+    return {};  // Fail-closed: all flags off.
+  }
+
+  return Object.fromEntries((data ?? []).map(row => [row.key, row.value]));
+});
+```
+
+**`app/(owner)/listings/page.tsx`** — owner's listings table:
+
+```tsx
+import Link from 'next/link';
+import { createServerClient } from '@/lib/supabase/server';
+import { Topbar } from '@/components/layout/Topbar/Topbar';
+import { Button } from '@/components/primitives/Button/Button';
+import { Card } from '@/components/primitives/Card/Card';
+import { Pill } from '@/components/primitives/Pill/Pill';
+import { Icon } from '@/components/primitives/Icon/Icon';
+import styles from './page.module.scss';
+
+export const dynamic = 'force-dynamic';
+
+export default async function MyListingsPage() {
+  const supabase = await createServerClient();
+  const { data: listings } = await supabase
+    .from('listings')
+    .select('id, title, city, status, bed_count, monthly_rent_per_bed, verification_level, created_at')
+    .order('created_at', { ascending: false });
+
+  return (
+    <>
+      <Topbar
+        title="הנכסים שלי"
+        subtitle={listings?.length ? `${listings.length} נכסים` : 'אין עדיין נכסים'}
+        actions={
+          <Link href="/listings/new">
+            <Button variant="cta" iconStart={<Icon name="plus" size="sm" />}>
+              הוסף נכס
+            </Button>
+          </Link>
+        }
+      />
+      <div className={styles.content}>
+        {!listings?.length ? (
+          <Card variant="outline" className={styles.empty}>
+            <h2>עדיין לא פרסמתם נכסים</h2>
+            <p>הוסיפו את הנכס הראשון שלכם והתחילו לקבל פניות מתאגידי בנייה.</p>
+            <Link href="/listings/new">
+              <Button variant="cta">פרסמו את הנכס הראשון</Button>
+            </Link>
+          </Card>
+        ) : (
+          <Card>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>שם</th>
+                  <th>עיר</th>
+                  <th>מיטות</th>
+                  <th>מחיר למיטה</th>
+                  <th>סטטוס</th>
+                  <th>אימות</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {listings.map(l => (
+                  <tr key={l.id}>
+                    <td>{l.title}</td>
+                    <td>{l.city}</td>
+                    <td>{l.bed_count}</td>
+                    <td>₪{l.monthly_rent_per_bed.toLocaleString('he-IL')}</td>
+                    <td><StatusPill status={l.status} /></td>
+                    <td><VerificationPill level={l.verification_level} /></td>
+                    <td>
+                      <Link href={`/listings/${l.id}`}>
+                        <Button variant="ghost" size="sm">ערוך</Button>
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        )}
+      </div>
+    </>
+  );
+}
+
+function StatusPill({ status }: { status: string }) {
+  const labels: Record<string, string> = {
+    draft: 'טיוטה',
+    published: 'פעיל',
+    archived: 'בארכיון',
+  };
+  const tones: Record<string, 'gray' | 'green' | 'orange'> = {
+    draft: 'gray',
+    published: 'green',
+    archived: 'orange',
+  };
+  return <Pill tone={tones[status] ?? 'gray'}>{labels[status] ?? status}</Pill>;
+}
+
+function VerificationPill({ level }: { level: number }) {
+  if (level === 1) return <Pill tone="gray">פרטים מהבעלים</Pill>;
+  if (level === 2) return <Pill tone="blue">מאומת מרחוק</Pill>;
+  if (level === 3) return <Pill tone="green">מאומת בשטח</Pill>;
+  return null;
+}
+```
+
+**`app/(owner)/listings/page.module.scss`** — table styling:
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.content {
+  padding: t.space(5);
+  @include m.from(t.bp(md)) {
+    padding: t.space(7);
+  }
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th, td {
+    padding: t.space(3);
+    text-align: start;
+    border-block-end: 1px solid t.color(border-default);
+  }
+
+  th {
+    font-size: t.font-size(sm);
+    color: t.color(fg-muted);
+    font-weight: t.font-weight(semibold);
+  }
+
+  tr:last-child td {
+    border-block-end: none;
+  }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: t.space(3);
+  padding: t.space(8);
+}
+```
+
+**`app/(owner)/_components/ListingForm.tsx`** — shared create/edit form (Client Component for form state):
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/primitives/Button/Button';
+import { Input } from '@/components/primitives/Input/Input';
+import { Card } from '@/components/primitives/Card/Card';
+import { createBrowserClient } from '@/lib/supabase/browser';
+import type { ListingFormProps, ListingFormValues } from './ListingForm.types';
+import styles from './ListingForm.module.scss';
+
+const EMPTY: ListingFormValues = {
+  title: '',
+  description: '',
+  city: '',
+  street: '',
+  street_number: '',
+  bed_count: 8,
+  monthly_rent_per_bed: 1200,
+  area_sqm: undefined,
+  bathroom_count: undefined,
+  has_kitchen: true,
+  has_wifi: false,
+  has_parking: false,
+};
+
+export function ListingForm({ initial, listingId }: ListingFormProps) {
+  const router = useRouter();
+  const supabase = createBrowserClient();
+  const [values, setValues] = useState<ListingFormValues>(initial ?? EMPTY);
+  const [saving, setSaving] = useState<'idle' | 'draft' | 'publish'>('idle');
+  const [error, setError] = useState<string | null>(null);
+
+  function update<K extends keyof ListingFormValues>(key: K, value: ListingFormValues[K]) {
+    setValues(v => ({ ...v, [key]: value }));
+  }
+
+  async function save(targetStatus: 'draft' | 'published') {
+    setError(null);
+    setSaving(targetStatus === 'published' ? 'publish' : 'draft');
+
+    const payload = {
+      ...values,
+      status: targetStatus,
+      ...(targetStatus === 'published' ? { published_at: new Date().toISOString() } : {}),
+    };
+
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) {
+      setError('יש להתחבר מחדש');
+      setSaving('idle');
+      return;
+    }
+
+    let res;
+    if (listingId) {
+      res = await supabase.from('listings').update(payload).eq('id', listingId).select().single();
+    } else {
+      res = await supabase.from('listings').insert({ ...payload, owner_id: user.id }).select().single();
+    }
+
+    if (res.error) {
+      setError(res.error.message);
+      setSaving('idle');
+      return;
+    }
+
+    router.push('/listings');
+    router.refresh();
+  }
+
+  return (
+    <Card className={styles.card}>
+      <div className={styles.grid}>
+        <Input
+          label="כותרת"
+          placeholder="לדוגמה: דירה ל-12 עובדים בלב תל אביב"
+          value={values.title}
+          onChange={e => update('title', e.target.value)}
+          fullWidth
+        />
+        <Input
+          label="עיר"
+          placeholder="תל אביב"
+          value={values.city}
+          onChange={e => update('city', e.target.value)}
+        />
+        <Input
+          label="רחוב"
+          placeholder="הרצל"
+          value={values.street ?? ''}
+          onChange={e => update('street', e.target.value)}
+        />
+        <Input
+          label="מספר"
+          placeholder="14"
+          value={values.street_number ?? ''}
+          onChange={e => update('street_number', e.target.value)}
+        />
+        <Input
+          type="number"
+          label="מספר מיטות"
+          value={String(values.bed_count)}
+          onChange={e => update('bed_count', parseInt(e.target.value) || 0)}
+        />
+        <Input
+          type="number"
+          label="מחיר למיטה / חודש (₪)"
+          value={String(values.monthly_rent_per_bed)}
+          onChange={e => update('monthly_rent_per_bed', parseInt(e.target.value) || 0)}
+        />
+        <Input
+          type="number"
+          label="שטח (מ״ר)"
+          value={String(values.area_sqm ?? '')}
+          onChange={e => update('area_sqm', e.target.value ? parseInt(e.target.value) : undefined)}
+        />
+        <Input
+          type="number"
+          label="מספר חדרי שירותים"
+          value={String(values.bathroom_count ?? '')}
+          onChange={e => update('bathroom_count', e.target.value ? parseInt(e.target.value) : undefined)}
+        />
+      </div>
+
+      <div className={styles.amenities}>
+        <h3>מתקנים</h3>
+        <label><input type="checkbox" checked={values.has_kitchen} onChange={e => update('has_kitchen', e.target.checked)} /> מטבח</label>
+        <label><input type="checkbox" checked={values.has_wifi} onChange={e => update('has_wifi', e.target.checked)} /> אינטרנט</label>
+        <label><input type="checkbox" checked={values.has_parking} onChange={e => update('has_parking', e.target.checked)} /> חניה</label>
+      </div>
+
+      <div className={styles.descGroup}>
+        <label>תיאור הנכס</label>
+        <textarea
+          className={styles.textarea}
+          rows={5}
+          value={values.description ?? ''}
+          onChange={e => update('description', e.target.value)}
+          placeholder="ספרו על הנכס: מיקום, איכות, מתקנים, גישה לתחבורה ציבורית..."
+        />
+      </div>
+
+      {error ? <p className={styles.error}>{error}</p> : null}
+
+      <div className={styles.actions}>
+        <Button variant="ghost" onClick={() => save('draft')} disabled={saving !== 'idle'}>
+          {saving === 'draft' ? 'שומר…' : 'שמור כטיוטה'}
+        </Button>
+        <Button variant="cta" onClick={() => save('published')} disabled={saving !== 'idle'}>
+          {saving === 'publish' ? 'מפרסם…' : 'פרסם נכס'}
+        </Button>
+      </div>
+    </Card>
+  );
+}
+```
+
+**`app/(owner)/_components/ListingForm.types.ts`**:
+
+```ts
+export interface ListingFormValues {
+  title: string;
+  description: string | null;
+  city: string;
+  street: string | null;
+  street_number: string | null;
+  bed_count: number;
+  monthly_rent_per_bed: number;
+  area_sqm: number | undefined;
+  bathroom_count: number | undefined;
+  has_kitchen: boolean;
+  has_wifi: boolean;
+  has_parking: boolean;
+}
+
+export interface ListingFormProps {
+  initial?: ListingFormValues;
+  listingId?: string;
+}
+```
+
+**`app/(owner)/_components/ListingForm.module.scss`**:
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.card { padding: t.space(5); }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: t.space(4);
+
+  @include m.from(t.bp(md)) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.amenities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: t.space(3);
+  align-items: center;
+  margin-block-start: t.space(5);
+
+  h3 { margin-inline-end: t.space(3); }
+  label { display: inline-flex; align-items: center; gap: t.space(2); cursor: pointer; }
+}
+
+.descGroup {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+  margin-block-start: t.space(5);
+}
+
+.textarea {
+  width: 100%;
+  padding: t.space(3);
+  border: 1px solid t.color(border-default);
+  border-radius: t.radius(lg);
+  font-family: inherit;
+  font-size: t.font-size(base);
+  resize: vertical;
+}
+
+.error {
+  color: t.color(red-600);
+  font-size: t.font-size(sm);
+  margin-block-start: t.space(3);
+}
+
+.actions {
+  display: flex;
+  gap: t.space(3);
+  justify-content: flex-end;
+  margin-block-start: t.space(5);
+}
+```
+
+**`app/(owner)/listings/new/page.tsx`** and **`[id]/page.tsx`** wrap `ListingForm`:
+
+```tsx
+// new/page.tsx
+import { Topbar } from '@/components/layout/Topbar/Topbar';
+import { ListingForm } from '../../_components/ListingForm';
+import styles from './page.module.scss';
+
+export default function NewListingPage() {
+  return (
+    <>
+      <Topbar title="הוספת נכס חדש" subtitle="פרסמו את הנכס שלכם בפלטפורמה" />
+      <div className={styles.content}>
+        <ListingForm />
+      </div>
+    </>
+  );
+}
+```
+
+```tsx
+// [id]/page.tsx
+import { notFound } from 'next/navigation';
+import { Topbar } from '@/components/layout/Topbar/Topbar';
+import { createServerClient } from '@/lib/supabase/server';
+import { ListingForm } from '../../_components/ListingForm';
+import styles from './page.module.scss';
+
+export const dynamic = 'force-dynamic';
+
+export default async function EditListingPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createServerClient();
+  const { data } = await supabase.from('listings').select('*').eq('id', id).single();
+  if (!data) notFound();
+
+  return (
+    <>
+      <Topbar title="עריכת נכס" subtitle={data.title} />
+      <div className={styles.content}>
+        <ListingForm
+          listingId={data.id}
+          initial={{
+            title: data.title,
+            description: data.description,
+            city: data.city,
+            street: data.street,
+            street_number: data.street_number,
+            bed_count: data.bed_count,
+            monthly_rent_per_bed: data.monthly_rent_per_bed,
+            area_sqm: data.area_sqm ?? undefined,
+            bathroom_count: data.bathroom_count ?? undefined,
+            has_kitchen: data.has_kitchen,
+            has_wifi: data.has_wifi,
+            has_parking: data.has_parking,
+          }}
+        />
+      </div>
+    </>
+  );
+}
+```
+
+> **Note on image upload:** CP-4a does **not** include image upload UI. The `listing_images` table and Storage bucket exist, but the form has no image picker yet. Image upload lands in CP-4b along with the public listing detail page that displays them. This is a deliberate split — getting CRUD of the structured data right first, then layering images on top.
+
+### Step 6 — CP-4a self-tests
+
+```bash
+# tsc, lint, build
+npx tsc --noEmit && npm run lint && npm run build || { echo "FAIL: build chain"; exit 1; }
+
+# Migrations applied
+supabase db query "SELECT count(*) FROM public.feature_flags;" | grep -q 6 || { echo "FAIL: feature flags not seeded"; exit 1; }
+
+# Owner pages render (signed in)
+# (Manual: dev server, sign in as owner_company test user, visit /listings)
+
+echo "CP-4a self-tests pass."
+```
+
+After self-tests pass, print:
+
+```
+═══════════════════════════════════════════
+PHASE 4 PART A COMPLETE — CHECKPOINT CP-4a REACHED
+═══════════════════════════════════════════
+```
+
+Halt and wait for `continue` before moving to CP-4b.
 
 ---
 
-# §Phase 6 — Hostel booking engine (isolated)
+## §4.6 — CP-4b: Public homepage + browse + listing detail + hostels page + booking-request schema
 
-**Status:** stubbed.
+(Continued in next checkpoint. After `continue`, proceed.)
 
-**Goal:** Replicate the legacy `hostel_bookings` schema with **zero FKs to corporate tables** (IRON_RULE 1). Drop all legacy/dead columns. Four hostels per BUILD_PLAN §3.A (OQ-16). Pelecard integration mirroring Pakal Nofesh.
+### Step 1 — Booking schema migration
 
-**Deliverables:** Separate migration. Pages under `app/(hostels)/`. Pelecard server-side wiring. `docs/HOSTEL_BOOKING_ENGINE.md` extended with implementation details.
+Create `supabase/migrations/20260506000004_bookings_schema.sql`:
+
+```sql
+CREATE TYPE public.booking_status AS ENUM (
+  'requested',   -- Corporation submitted; owner not yet seen
+  'rejected',    -- Owner rejected
+  'accepted',    -- Owner accepted; awaiting payment
+  'paid',        -- Corporation paid via Pelecard; awaiting contract signatures
+  'confirmed',   -- Both parties signed contract
+  'cancelled'    -- Cancelled at any stage
+);
+
+CREATE TABLE public.bookings (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  listing_id          uuid NOT NULL REFERENCES public.listings(id) ON DELETE RESTRICT,
+  corporation_id      uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
+  owner_id            uuid NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
+
+  status              public.booking_status NOT NULL DEFAULT 'requested',
+  start_date          date NOT NULL,
+  end_date            date NOT NULL CHECK (end_date > start_date),
+  worker_count        smallint NOT NULL CHECK (worker_count >= 1),
+
+  -- Pricing snapshot at request time (in ILS, no decimals)
+  monthly_rent_total  integer NOT NULL,
+  oz_commission       integer NOT NULL,
+  total_amount        integer NOT NULL,
+
+  -- Pelecard
+  pelecard_payment_url     text,
+  pelecard_transaction_id  text,
+  paid_at                  timestamptz,
+
+  -- HelloSign
+  hellosign_request_id     text,
+  contract_signed_at       timestamptz,
+
+  -- Notes from corporation when requesting
+  request_message     text,
+
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX bookings_listing_idx ON public.bookings(listing_id);
+CREATE INDEX bookings_corporation_idx ON public.bookings(corporation_id);
+CREATE INDEX bookings_owner_idx ON public.bookings(owner_id);
+CREATE INDEX bookings_status_idx ON public.bookings(status);
+
+CREATE TRIGGER bookings_set_updated_at
+  BEFORE UPDATE ON public.bookings
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
+
+-- Corporation can SELECT their own bookings.
+CREATE POLICY "bookings_select_corporation"
+  ON public.bookings FOR SELECT TO authenticated
+  USING (auth.uid() = corporation_id);
+
+-- Owner can SELECT bookings on their listings.
+CREATE POLICY "bookings_select_owner"
+  ON public.bookings FOR SELECT TO authenticated
+  USING (auth.uid() = owner_id);
+
+-- Corporation can INSERT a booking request.
+CREATE POLICY "bookings_insert_corporation"
+  ON public.bookings FOR INSERT TO authenticated
+  WITH CHECK (
+    auth.uid() = corporation_id
+    AND (SELECT role FROM public.profiles WHERE id = auth.uid()) = 'construction_corporation'
+  );
+
+-- Owner can UPDATE only the bookings on their listings, and only the
+-- fields they're allowed to change (status transitions handled in app code).
+CREATE POLICY "bookings_update_owner"
+  ON public.bookings FOR UPDATE TO authenticated
+  USING (auth.uid() = owner_id)
+  WITH CHECK (auth.uid() = owner_id);
+
+-- Service role bypasses RLS for webhook updates.
+
+COMMENT ON TABLE public.bookings IS 'Booking requests from construction_corporation to owner_company. See PROMPT_LIBRARY Phase 4 for lifecycle.';
+```
+
+### Step 2 — Public homepage `app/page.tsx`
+
+This is the marketing-style homepage at the root of the site. Public, server-rendered, fetches a small preview of listings and shows the four hostels strip.
+
+Structure (mirroring the existing workerhome.co.il but trimmed per MVP scope):
+
+1. Hero with two CTAs: "חפש נכס מתאים" / "פרסם נכס"
+2. Trust strip (4 small badges)
+3. Hostels strip — four cards linking to FDM URLs (per `DECISIONS_LOG.md` 2026-05-06: link-out for MVP, embed/native deferred)
+4. Stats strip (4 stats)
+5. Listings preview — first 6 published listings
+6. How it works — 3 steps
+7. Legal callout
+8. Owner-side pitch (without the calculator)
+9. FAQ
+10. Footer
+
+```tsx
+// app/page.tsx
+import Link from 'next/link';
+import { createServerClient } from '@/lib/supabase/server';
+import { Button } from '@/components/primitives/Button/Button';
+import { Card } from '@/components/primitives/Card/Card';
+import { Pill } from '@/components/primitives/Pill/Pill';
+import { Icon } from '@/components/primitives/Icon/Icon';
+import styles from './page.module.scss';
+import { HOSTELS } from '@/lib/hostels';
+
+export const dynamic = 'force-dynamic';
+
+export default async function HomePage() {
+  const supabase = await createServerClient();
+  const { data: previewListings } = await supabase
+    .from('listings')
+    .select('id, title, city, bed_count, monthly_rent_per_bed, verification_level')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false })
+    .limit(6);
+
+  return (
+    <main className={styles.main}>
+      {/* HERO */}
+      <section className={styles.hero}>
+        <div className={styles.heroInner}>
+          <p className={styles.kicker}>פיילוט גוש דן פעיל</p>
+          <h1>דיור לעובדים זרים<br/>עומד בחוק, מנוהל בשטח</h1>
+          <p className={styles.heroSubtitle}>
+            קבלני בנייה: מצאו דיור מאומת תוך 48 שעות.<br/>
+            בעלי נכסים: הגדילו הכנסה ב-80%+ ממחיר שוק.
+          </p>
+          <p className={styles.terms}>ללא עלות לקבלן · 5% עמלה מבעל הנכס · חשבונית מס</p>
+          <div className={styles.heroActions}>
+            <Link href="/listings"><Button variant="cta" size="lg">חפש נכס מתאים</Button></Link>
+            <Link href="/sign-up"><Button variant="ghost" size="lg">פרסם נכס</Button></Link>
+          </div>
+        </div>
+      </section>
+
+      {/* TRUST STRIP */}
+      <section className={styles.trustStrip}>
+        <div className={styles.trustItem}><Icon name="check" /> חוזה דיגיטלי</div>
+        <div className={styles.trustItem}><Icon name="check" /> חשבונית מס</div>
+        <div className={styles.trustItem}><Icon name="check" /> ביקורת מסמכים</div>
+        <div className={styles.trustItem}><Icon name="check" /> תמיכה בעברית</div>
+      </section>
+
+      {/* HOSTELS STRIP */}
+      <section className={styles.section}>
+        <h2>אכסניות עוז</h2>
+        <p className={styles.sectionLead}>לינה יומית גמישה · ₪120/לילה</p>
+        <div className={styles.hostelsGrid}>
+          {HOSTELS.map(h => (
+            <a key={h.slug} href={h.fdmUrl} target="_blank" rel="noreferrer noopener" className={styles.hostelCard}>
+              <span className={styles.hostelEmoji}>{h.emoji}</span>
+              <span className={styles.hostelCity}>{h.city}</span>
+              <span className={styles.hostelName}>{h.name}</span>
+              <span className={styles.hostelCta}>🛏️ הזמן</span>
+            </a>
+          ))}
+        </div>
+      </section>
+
+      {/* STATS */}
+      <section className={styles.statsSection}>
+        <Stat icon="users" big="90,000" label="עובדים זרים בבנייה" />
+        <Stat icon="percent" big="5%" label="עמלה מבעל הנכס" />
+        <Stat icon="clock" big="48h" label="זמן מענה מקסימלי" />
+        <Stat icon="ruler" big='4 מ"ר' label="לעובד — חוקי" />
+      </section>
+
+      {/* LISTINGS PREVIEW */}
+      {previewListings?.length ? (
+        <section className={styles.section}>
+          <h2>נכסים זמינים — גוש דן</h2>
+          <div className={styles.listingsPreview}>
+            {previewListings.map(l => (
+              <Link key={l.id} href={`/listings/${l.id}`} className={styles.previewCard}>
+                <div className={styles.previewBody}>
+                  <h3>{l.title}</h3>
+                  <p>📍 {l.city}</p>
+                  <p>{l.bed_count} מיטות · ₪{l.monthly_rent_per_bed.toLocaleString('he-IL')}/מיטה</p>
+                </div>
+              </Link>
+            ))}
+          </div>
+          <div className={styles.allLink}>
+            <Link href="/listings"><Button variant="ghost">כל הנכסים ←</Button></Link>
+          </div>
+        </section>
+      ) : null}
+
+      {/* HOW IT WORKS */}
+      <section className={styles.section}>
+        <h2>איך זה עובד?</h2>
+        <p className={styles.sectionLead}>מהחיפוש עד לחתימה — תהליך מסודר</p>
+        <div className={styles.steps}>
+          <Step n={1} title="חפש לפי צורך" t="5 דקות"
+            body="סנן לפי עיר, מספר מיטות וגודל נכס. כל נכס כולל פירוט מלא." />
+          <Step n={2} title="בקש לשריין" t="עד 48 שעות"
+            body="שלח בקשת שריון לבעל הנכס. הבעלים מאשר תוך 48 שעות." />
+          <Step n={3} title="שלם וחתום" t="3-5 ימי עסקים"
+            body="תשלום מאובטח דרך פלאקארד וחתימה דיגיטלית על חוזה השכירות." />
+        </div>
+      </section>
+
+      {/* LEGAL CALLOUT */}
+      <section className={styles.legal}>
+        <h3>⚖️ חוק עובדים זרים מחייב דיור הולם</h3>
+        <p>כל מעסיק חייב לספק דיור העומד בתקנות: מינימום 4 מ״ר לעובד, שירותים ומקלחות לפי יחס קבוע. אי עמידה בתקנות — עבירה פלילית.</p>
+        <Link href="/listings"><Button variant="ghost">לנכסים מאומתים ←</Button></Link>
+      </section>
+
+      {/* OWNER PITCH */}
+      <section className={styles.ownerPitch}>
+        <h2>בעל נכס מתאים? הגדל הכנסה בצורה מסודרת</h2>
+        <p>פרסום בסיסי ללא עלות. ביקורת פיזית ותג אימות — בקרוב.</p>
+        <Link href="/sign-up"><Button variant="cta" size="lg">פרסם נכס</Button></Link>
+      </section>
+
+      {/* FAQ */}
+      <section className={styles.section}>
+        <h2>שאלות נפוצות</h2>
+        <Faq q="האם הנכסים מאושרים על ידי הרשויות?" a="כל הנכסים מתפרסמים תחת הצהרת הבעלים. נכסים שעברו ביקורת מסמכים נושאים תג אימות." />
+        <Faq q="כמה זמן לוקח למצוא נכס מתאים?" a="הזמן הממוצע משריון לחתימה הוא 3-5 ימי עסקים." />
+        <Faq q="האם יש חוזה שכירות מסודר?" a="כן. אנחנו מספקים חוזה שכירות תקני שעובר חתימה דיגיטלית של שני הצדדים." />
+        <Faq q="מה עלות השירות?" a="לקבלן: ללא עלות. לבעל הנכס: 5% עמלה מסכום השכירות החודשית." />
+      </section>
+
+      {/* FOOTER */}
+      <footer className={styles.footer}>
+        <p>פלטפורמה לאיתור דיור לעובדים זרים בגוש דן.</p>
+        <p>© 2026 עוז. כל הזכויות שמורות.</p>
+      </footer>
+    </main>
+  );
+}
+
+function Stat({ icon, big, label }: { icon: string; big: string; label: string }) {
+  return (
+    <div className={styles.stat}>
+      <Icon name={icon} size="lg" />
+      <strong>{big}</strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+function Step({ n, title, t, body }: { n: number; title: string; t: string; body: string }) {
+  return (
+    <Card variant="outline" className={styles.step}>
+      <span className={styles.stepNum}>{n}</span>
+      <h3>{title}</h3>
+      <span className={styles.stepTime}>⏱ {t}</span>
+      <p>{body}</p>
+    </Card>
+  );
+}
+
+function Faq({ q, a }: { q: string; a: string }) {
+  return (
+    <details className={styles.faqItem}>
+      <summary>{q}</summary>
+      <p>{a}</p>
+    </details>
+  );
+}
+```
+
+### Step 3 — Hostels module + dedicated page
+
+`lib/hostels.ts` — single source of truth for the four hostels:
+
+```ts
+/**
+ * Source of truth for the four AM HOSTELS hostels surfaced on oz-marketplace.
+ * MVP: link-out cards to FrontDeskMaster's hosted booking.
+ * See DECISIONS_LOG 2026-05-06 for hostels-link-out policy and conversion roadmap.
+ */
+export const HOSTELS = [
+  {
+    slug: 'jerusalem',
+    city: 'ירושלים',
+    name: 'Cinema Hostel Jerusalem',
+    emoji: '🕌',
+    fdmUrl: 'https://new-booking.frontdeskmaster.com/?hostelId=xZvO4Y%2BkSeCwIk%2F2U6JR6QuxmBFePEKM',
+  },
+  {
+    slug: 'tel-aviv',
+    city: 'תל אביב / יפו',
+    name: 'Jungle Jaffa Hostel',
+    emoji: '🌊',
+    fdmUrl: 'https://new-booking.frontdeskmaster.com/?hostelId=JB0%2BaOH1hnDhBNORr1CZcD3tWkV9vR%2FM',
+  },
+  {
+    slug: 'haifa',
+    city: 'חיפה',
+    name: 'Haifa Hostel',
+    emoji: '⚓',
+    fdmUrl: 'https://new-booking.frontdeskmaster.com/?hostelId=iGjwgdoeTwDY%2BVWkyB7c%2BQWZDBiQB%2BG%2B',
+  },
+  {
+    slug: 'tiberias',
+    city: 'טבריה',
+    name: 'Tiberias Hostel',
+    emoji: '🏞️',
+    fdmUrl: 'https://new-booking.frontdeskmaster.com/?hostelId=zRrshXqJSiXA4t95Q8TUGIQCPaoMgpt6',
+  },
+] as const;
+
+export type Hostel = typeof HOSTELS[number];
+```
+
+`app/hostels/page.tsx` — full hostels page:
+
+```tsx
+import { HOSTELS } from '@/lib/hostels';
+import styles from './page.module.scss';
+
+export const metadata = { title: 'אכסניות עוז · ירושלים, תל אביב, חיפה, טבריה' };
+
+export default function HostelsPage() {
+  return (
+    <main className={styles.main}>
+      <header className={styles.header}>
+        <h1>אכסניות עוז</h1>
+        <p>ארבע אכסניות בארבע ערים. לינה יומית, חודשית או לטווח ארוך.</p>
+      </header>
+
+      <div className={styles.grid}>
+        {HOSTELS.map(h => (
+          <a
+            key={h.slug}
+            href={h.fdmUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className={styles.card}
+          >
+            <span className={styles.emoji}>{h.emoji}</span>
+            <h2>{h.name}</h2>
+            <p className={styles.city}>{h.city}</p>
+            <span className={styles.cta}>🛏️ הזמן עכשיו</span>
+          </a>
+        ))}
+      </div>
+    </main>
+  );
+}
+```
+
+### Step 4 — Public marketplace `app/listings/page.tsx`
+
+Public route. Server-rendered. Search and filter via URL params.
+
+```tsx
+import Link from 'next/link';
+import { createServerClient } from '@/lib/supabase/server';
+import { Card } from '@/components/primitives/Card/Card';
+import { Pill } from '@/components/primitives/Pill/Pill';
+import styles from './page.module.scss';
+
+export const dynamic = 'force-dynamic';
+
+export default async function ListingsPage({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+  const params = await searchParams;
+  const supabase = await createServerClient();
+
+  let q = supabase
+    .from('listings')
+    .select('id, title, city, bed_count, monthly_rent_per_bed, verification_level, area_sqm')
+    .eq('status', 'published')
+    .order('published_at', { ascending: false });
+
+  if (params.city) q = q.eq('city', params.city);
+  if (params.minBeds) q = q.gte('bed_count', parseInt(params.minBeds));
+  if (params.maxRent) q = q.lte('monthly_rent_per_bed', parseInt(params.maxRent));
+
+  const { data: listings } = await q;
+
+  return (
+    <main className={styles.main}>
+      <header className={styles.header}>
+        <h1>נכסים זמינים</h1>
+        <p>{listings?.length ?? 0} נכסים בגוש דן</p>
+      </header>
+
+      <ListingFilters initial={params} />
+
+      <div className={styles.grid}>
+        {listings?.map(l => (
+          <Link key={l.id} href={`/listings/${l.id}`} className={styles.cardLink}>
+            <Card>
+              <div className={styles.cardBody}>
+                <h3>{l.title}</h3>
+                <p>📍 {l.city}</p>
+                <div className={styles.cardMeta}>
+                  <span>{l.bed_count} מיטות</span>
+                  {l.area_sqm ? <span>{l.area_sqm} מ״ר</span> : null}
+                </div>
+                <p className={styles.price}>₪{l.monthly_rent_per_bed.toLocaleString('he-IL')}<span>/מיטה</span></p>
+                <VerificationPill level={l.verification_level} />
+              </div>
+            </Card>
+          </Link>
+        ))}
+      </div>
+
+      {!listings?.length ? <p className={styles.empty}>לא נמצאו נכסים העונים על הקריטריונים</p> : null}
+    </main>
+  );
+}
+
+function VerificationPill({ level }: { level: number }) {
+  if (level === 1) return <Pill tone="gray">פרטים מהבעלים</Pill>;
+  if (level === 2) return <Pill tone="blue">מאומת מרחוק</Pill>;
+  return null;
+}
+
+function ListingFilters({ initial }: { initial: Record<string, string> }) {
+  // GET form. Server re-renders on submit.
+  return (
+    <form className={styles.filters} method="get">
+      <input name="city" placeholder="עיר" defaultValue={initial.city} />
+      <input name="minBeds" type="number" placeholder="מינ׳ מיטות" defaultValue={initial.minBeds} />
+      <input name="maxRent" type="number" placeholder="מחיר מקסימלי למיטה" defaultValue={initial.maxRent} />
+      <button type="submit">חפש</button>
+    </form>
+  );
+}
+```
+
+### Step 5 — Public listing detail `app/listings/[id]/page.tsx`
+
+Public route showing full listing details. If user is `construction_corporation` and signed in, shows a "request to book" form.
+
+```tsx
+import { notFound } from 'next/navigation';
+import { createServerClient } from '@/lib/supabase/server';
+import { Card } from '@/components/primitives/Card/Card';
+import { Pill } from '@/components/primitives/Pill/Pill';
+import { BookingRequestForm } from './BookingRequestForm';
+import styles from './page.module.scss';
+
+export const dynamic = 'force-dynamic';
+
+export default async function ListingDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const supabase = await createServerClient();
+
+  const { data: listing } = await supabase
+    .from('listings')
+    .select('*')
+    .eq('id', id)
+    .eq('status', 'published')
+    .single();
+
+  if (!listing) notFound();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  let role: string | null = null;
+  if (user) {
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    role = profile?.role ?? null;
+  }
+
+  return (
+    <main className={styles.main}>
+      <header className={styles.header}>
+        <h1>{listing.title}</h1>
+        <p>📍 {listing.city}{listing.street ? `, ${listing.street} ${listing.street_number ?? ''}` : ''}</p>
+      </header>
+
+      <div className={styles.layout}>
+        <Card className={styles.detail}>
+          <h2>פרטי הנכס</h2>
+          <ul>
+            <li>{listing.bed_count} מיטות</li>
+            {listing.area_sqm ? <li>{listing.area_sqm} מ״ר</li> : null}
+            {listing.bathroom_count ? <li>{listing.bathroom_count} חדרי שירותים</li> : null}
+            {listing.has_kitchen ? <li>מטבח</li> : null}
+            {listing.has_wifi ? <li>אינטרנט</li> : null}
+            {listing.has_parking ? <li>חניה</li> : null}
+          </ul>
+          <p className={styles.price}>₪{listing.monthly_rent_per_bed.toLocaleString('he-IL')}<span>/מיטה/חודש</span></p>
+          {listing.description ? <p>{listing.description}</p> : null}
+        </Card>
+
+        <Card className={styles.bookingPanel}>
+          {!user ? (
+            <>
+              <h3>רוצים לשריין?</h3>
+              <p>התחברו כתאגיד בנייה כדי לשלוח בקשת שריון.</p>
+              <a href={`/sign-in?next=/listings/${listing.id}`}>התחברות</a>
+            </>
+          ) : role === 'construction_corporation' ? (
+            <BookingRequestForm listing={listing} />
+          ) : (
+            <>
+              <h3>בקשת שריון</h3>
+              <p>רק תאגידי בנייה רשאים לשלוח בקשות שריון.</p>
+            </>
+          )}
+        </Card>
+      </div>
+    </main>
+  );
+}
+```
+
+`BookingRequestForm.tsx` — Client Component:
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/primitives/Button/Button';
+import { Input } from '@/components/primitives/Input/Input';
+import { createBrowserClient } from '@/lib/supabase/browser';
+
+const OZ_COMMISSION_RATE = 0.05;  // 5% per existing brand language. Move to feature_flags or a config table in Phase 5 if it changes.
+
+interface Props {
+  listing: {
+    id: string;
+    owner_id: string;
+    monthly_rent_per_bed: number;
+    bed_count: number;
+  };
+}
+
+export function BookingRequestForm({ listing }: Props) {
+  const supabase = createBrowserClient();
+  const router = useRouter();
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [workers, setWorkers] = useState(listing.bed_count);
+  const [message, setMessage] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const months = monthsBetween(start, end);
+  const monthlyRent = workers * listing.monthly_rent_per_bed;
+  const totalRent = monthlyRent * months;
+  const commission = Math.round(totalRent * OZ_COMMISSION_RATE);
+  const total = totalRent + commission;
+
+  async function submit() {
+    setError(null);
+    setBusy(true);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setError('יש להתחבר מחדש'); setBusy(false); return; }
+
+    const { data, error: e } = await supabase.from('bookings').insert({
+      listing_id: listing.id,
+      corporation_id: user.id,
+      owner_id: listing.owner_id,
+      start_date: start,
+      end_date: end,
+      worker_count: workers,
+      monthly_rent_total: totalRent,
+      oz_commission: commission,
+      total_amount: total,
+      request_message: message || null,
+    }).select().single();
+
+    if (e) { setError(e.message); setBusy(false); return; }
+
+    router.push('/bookings/corporation');
+  }
+
+  return (
+    <div>
+      <h3>בקשת שריון</h3>
+      <Input type="date" label="תאריך התחלה" value={start} onChange={e => setStart(e.target.value)} />
+      <Input type="date" label="תאריך סיום" value={end} onChange={e => setEnd(e.target.value)} />
+      <Input type="number" label="מספר עובדים" value={String(workers)} onChange={e => setWorkers(parseInt(e.target.value) || 0)} />
+      <textarea placeholder="הודעה לבעל הנכס (אופציונלי)" value={message} onChange={e => setMessage(e.target.value)} />
+
+      {months > 0 && workers > 0 ? (
+        <div>
+          <p>חודשים: {months}</p>
+          <p>שכירות: ₪{totalRent.toLocaleString('he-IL')}</p>
+          <p>עמלת עוז (5%): ₪{commission.toLocaleString('he-IL')}</p>
+          <p><strong>סה״כ: ₪{total.toLocaleString('he-IL')}</strong></p>
+        </div>
+      ) : null}
+
+      {error ? <p className="error">{error}</p> : null}
+
+      <Button variant="cta" onClick={submit} disabled={busy || !start || !end || workers <= 0}>
+        {busy ? 'שולח…' : 'שלח בקשה'}
+      </Button>
+    </div>
+  );
+}
+
+function monthsBetween(start: string, end: string): number {
+  if (!start || !end) return 0;
+  const s = new Date(start);
+  const e = new Date(end);
+  const days = (e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24);
+  return Math.ceil(days / 30);
+}
+```
+
+### Step 6 — Bookings list views
+
+Two routes:
+
+- `app/bookings/corporation/page.tsx` — corporation sees their own booking requests across all listings
+- `app/bookings/owner/page.tsx` — owner sees booking requests on their listings
+
+Both use auth gate + role check, same pattern as `app/(owner)/layout.tsx`.
+
+> **Owner accept/reject is included here at the UI level (button click writes `status='accepted'` or `'rejected'`), but the *consequences* of accept (Pelecard URL generation, email send) land in CP-4c. Until then, accept just sets the status.**
+
+### Step 7 — Listing image upload
+
+CP-4b adds image upload to the existing `ListingForm.tsx`. New section in the form: file picker, multi-upload, drag-and-drop, displays existing images with reorder + delete. Backed by Supabase Storage `listing-images` bucket. Each owner uploads to `{owner_uuid}/{listing_uuid}/{image_uuid}.{ext}`. Image URLs displayed in the listing detail page.
+
+### Step 8 — CP-4b self-tests
+
+```bash
+npx tsc --noEmit && npm run lint && npm run build || { echo "FAIL: build"; exit 1; }
+
+# Public homepage renders, contains hero, hostels strip
+# Public listings page renders, shows published listings
+# Listing detail page renders, shows full data
+# Booking insert succeeds for construction_corporation
+# Booking insert REJECTED by RLS for owner_company role
+
+echo "CP-4b self-tests pass."
+```
+
+After self-tests pass, print:
+
+```
+═══════════════════════════════════════════
+PHASE 4 PART B COMPLETE — CHECKPOINT CP-4b REACHED
+═══════════════════════════════════════════
+```
+
+Halt and wait for `continue` before moving to CP-4c.
 
 ---
 
-# §Phase 7 — Integrations
+## §4.7 — CP-4c: Pelecard + HelloSign + booking lifecycle
 
-**Status:** stubbed.
+(Continued in next checkpoint. After `continue`, proceed.)
 
-**Goal:** Wire Twilio · HelloSign · Resend · Anthropic Claude (AI Import). Pelecard already in Phase 6.
+This checkpoint integrates two third-party services and wires the full booking state machine. The work splits into:
 
-**Deliverables:** Server-side clients in `lib/integrations/`. Webhook handlers under `app/api/webhooks/`. Edge functions for AI Import. `docs/INTEGRATIONS.md` extended with implementation details and runbook entries.
+1. **Pelecard Link b'Click integration** — `lib/integrations/pelecard.ts` with `createPaymentLink({ amount, description, externalId })` returning `{ url, transactionId }`. Webhook handler at `app/api/webhooks/pelecard/route.ts` that verifies signature and updates `bookings.status = 'paid'`.
+
+2. **HelloSign integration** — `lib/integrations/hellosign.ts` with `sendSignatureRequest({ booking, listing, owner, corporation })` that posts the booking + property data into the standardized lease template and emails both parties. Webhook handler at `app/api/webhooks/hellosign/route.ts` that updates `bookings.status = 'confirmed'` when both parties sign.
+
+3. **Resend transactional emails** — `lib/integrations/resend.ts` and templates in `lib/emails/`. Emails sent at every state transition (request → owner; accept → corporation with payment link; pay → both parties with contract link; signed → both parties with confirmation).
+
+4. **Owner booking actions** — accept/reject buttons on the owner's bookings list now have real consequences: accept generates Pelecard link, sends email; reject sends email and ends the flow.
+
+5. **Booking status transitions** — server actions that enforce valid state machine: `requested → accepted | rejected`; `accepted → paid` (via Pelecard webhook only); `paid → confirmed` (via HelloSign webhook only); cancellation possible from any pre-paid state.
+
+6. **Standardized lease template** — Hebrew RTL Word/PDF template stored in `templates/lease.docx`, with placeholders for `{{owner_name}}`, `{{corporation_name}}`, `{{property_address}}`, `{{start_date}}`, `{{end_date}}`, `{{monthly_rent}}`, `{{worker_count}}`, etc. HelloSign fills these from booking data.
+
+### Required environment values for CP-4c
+
+These must be in `.env.local` for the integrations to work end-to-end:
+
+```env
+PELECARD_TERMINAL_NUMBER=
+PELECARD_API_USER=
+PELECARD_API_PASSWORD=
+PELECARD_ENV=test
+PELECARD_WEBHOOK_SECRET=
+
+HELLOSIGN_API_KEY=
+HELLOSIGN_CLIENT_ID=
+HELLOSIGN_WEBHOOK_SECRET=
+HELLOSIGN_TEMPLATE_ID=
+
+RESEND_API_KEY=
+RESEND_FROM_EMAIL=noreply@oz-housing.co.il
+```
+
+If any are missing, the corresponding integration is skipped (Pelecard URL field stays null; HelloSign signature request not sent; emails logged to console instead of sent). This means **CP-4c can complete with partial credentials** — the code paths are validated even if the third-party services aren't fully provisioned.
+
+### What needs to happen on Adir's side before CP-4c can fully smoke
+
+- Pelecard merchant account + test credentials (Alon)
+- HelloSign account + standardized lease template uploaded with named fields
+- Resend account + verified sending domain (`oz-housing.co.il` or similar)
+
+### CP-4c self-tests
+
+```bash
+npx tsc --noEmit && npm run lint && npm run build || { echo "FAIL: build"; exit 1; }
+
+# Pelecard webhook handler exists and validates signatures
+# HelloSign webhook handler exists and updates booking on signed-by-both
+# Resend client exists and sends test email (or logs to console if no key)
+# Booking state machine: requested → accepted → paid → confirmed transitions tested via service-role smoke
+
+echo "CP-4c self-tests pass."
+```
+
+### Commit
+
+```
+phase 4: marketplace + booking flow + hostels page
+
+CP-4a: listings schema (listings, listing_images, feature_flags) +
+       owner-company management UI + image upload
+CP-4b: public homepage + marketplace browse + listing detail +
+       hostels page + booking request schema + corporation/owner
+       booking views
+CP-4c: Pelecard Link b'Click + HelloSign signature flow +
+       Resend transactional emails + booking state machine
+
+Reaches CP-4c.
+```
+
+Print closing banner and exit.
 
 ---
 
-# §Phase 8 — Production readiness
+# §Phase 5 — Production readiness
 
-**Status:** stubbed.
+**Status:** stubbed. Filled before MVP launch.
 
-**Goal:** Polish for launch.
+**Goal:** move from local Supabase to a real Supabase project, wire the production domain, deploy crons, harden the integrations, and complete a final visual + a11y audit.
 
-**Deliverables:** Real font weights ported (resolves OQ-20). Cron jobs landed (`health-check`, `vercel-monitor`, `qa-checks` per OQ-29). Visual regression review against `corporate_assets_full.html`, `marketplace_ui_kit.html`, `AM_Hostels_Booking_System.html` at 375/768/1280px. Lighthouse + a11y audit. Rate limits, monitoring, error tracking.
+**Deliverables:**
+- Real Supabase project provisioned (replaces local). Migrations applied.
+- Domain wired (production custom domain on Vercel pointing to oz-marketplace).
+- Cron jobs deployed: `health-check`, `vercel-monitor`, `qa-checks` (per BUILD_PLAN OQ-29).
+- Real font weights ported (resolves OQ-20).
+- Lighthouse + a11y audit at three breakpoints.
+- Rate limits, monitoring, error tracking (Sentry or similar).
+- Final visual regression review against existing workerhome.co.il at 375 / 768 / 1280px.
+- End-to-end smoke against production: signup as both roles, create listing, browse as anonymous, request booking, accept, pay (Pelecard test), sign (HelloSign test), confirm.
+
+**Checkpoint:** CP-5 — production smoke passes; ready for soft launch.
 
 ---
 
-# §Phase 9 — Future-roadmap (NOT MVP)
-
-**Status:** explicitly gated. Not entered until Adir greenlights.
-
-**Goal:** Items deferred from MVP per BUILD_PLAN §6 Phase 9.
-
-**Deliverables:** Neema integration (OQ-15), virtual tour, anything else flagged in `docs/specs/dreams/`.
-
----
-
-*End of PROMPT_LIBRARY. Phase 0 ready to execute.*
+*End of PROMPT_LIBRARY. Phase 4 ready to execute after Phase 3 lands.*

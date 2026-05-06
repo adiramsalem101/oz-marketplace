@@ -8,7 +8,13 @@
 
 ## 0. TL;DR
 
-oz-marketplace is a new project inspired by `worker-housing-platform` (legacy). The legacy specs and brand system are taken as authoritative inputs; the legacy code is reference material. Three checkpoints govern the build:
+oz-marketplace is a new project inspired by `worker-housing-platform` (legacy). The legacy specs and brand system are taken as authoritative inputs; the legacy code is reference material.
+
+**MVP scope — re-locked 2026-05-06:** ships two product surfaces to production:
+1. **B2B marketplace** — owner-companies list properties; construction corporations browse, request to book, pay full stay upfront + OZ commission via Pelecard; sign a digital lease contract via HelloSign.
+2. **Hostels page** — public landing page with link-out cards to FrontDeskMaster's hosted booking for the four AM HOSTELS properties (Jerusalem / Tel Aviv / Haifa / Tiberias).
+
+**Out of MVP** (deferred): corporate dashboard, B2C / individual-owner product, native hostel booking engine, yield calculator, AI Import, virtual tours, ratings system, Tier-3 verification, Neema integration. See `DECISIONS_LOG.md` 2026-05-06 for the re-scope rationale.
 
 | Checkpoint | What you approve | Status |
 |---|---|---|
@@ -17,9 +23,13 @@ oz-marketplace is a new project inspired by `worker-housing-platform` (legacy). 
 | **CP-1.5** | All nine primitives reviewed at 375 / 768 / 1280px on the demo page | ✅ passed |
 | **CP-2.5** | Layout chrome (Sidebar / Topbar / Tabs / MobileDrawer / AppShell) reviewed at 375 / 768 / 1280px | ✅ passed |
 | **CP-3a** | Migrations applied to local Supabase; schema, RLS, and trigger verified by query | ⏳ awaits Phase 3 |
-| **CP-3b** | Auth UI reviewed at 375 / 768 / 1280px; sign-in produces session against local Supabase; RLS denies unauthenticated access | ⏳ awaits Phase 3 |
+| **CP-3b** | Auth UI reviewed at 375 / 768 / 1280px; three sign-in methods produce sessions against local Supabase; RLS denies unauthenticated access | ⏳ awaits Phase 3 |
+| **CP-4a** | Listings schema + RLS + listing-management screens (create / edit / list-mine) — owner-company can publish a listing end-to-end | ⏳ awaits Phase 4 |
+| **CP-4b** | Public homepage + marketplace browse + listing detail; construction corporation can request to book | ⏳ awaits Phase 4 |
+| **CP-4c** | Pelecard Link b'Click + HelloSign integration live; full request-to-book → pay → contract → confirmed flow works end-to-end | ⏳ awaits Phase 4 |
+| **CP-5** | Production readiness — real Supabase project provisioned, domain wired, monitoring + crons live, end-to-end smoke against production | ⏳ awaits Phase 5 |
 
-CP-2.5 cleared 2026-05-05. Phase 3 prompt is ready in `PROMPT_LIBRARY.md`.
+CP-2.5 cleared 2026-05-05. Phase 3 prompt is ready in `PROMPT_LIBRARY.md` (with 2026-05-06 amendment for third persona). Phase 4 prompt drafted 2026-05-06.
 
 ---
 
@@ -32,7 +42,7 @@ CP-2.5 cleared 2026-05-05. Phase 3 prompt is ready in `PROMPT_LIBRARY.md`.
 | Iron rules | `docs/IRON_RULES.md` | ✅ Authoritative | Rules 1, 2, 5, 9 carry through verbatim |
 | Database schema | `oz-marketplace-legacy/supabase/migrations/20260425000000_baseline.sql` (3293 lines) | ✅ Live ground truth | Recon's `06-legacy-schema.md` captures the full topology; rebuilt fresh for this project (see §3) |
 | AM Hostels booking engine | Live in legacy | ✅ Specs preserved verbatim in `recon/09-hostel-booking-engine.md` | Stays architecturally isolated. Legacy columns dropped (see §3, OQ-2) |
-| Brand assets — fonts | `docs/brand/assets/fonts/` | ⚠️ Partial | Heebo / Assistant declare 4 weights but ship only 400 → faux bold accepted for MVP, real weights ported in Phase 8 |
+| Brand assets — fonts | `docs/brand/assets/fonts/` | ⚠️ Partial | Heebo / Assistant declare 4 weights but ship only 400 → faux bold accepted for MVP, real weights ported in Phase 5 |
 | `.env.local` | Legacy project | ✅ Source of values | Merge strategy in §3.E |
 
 ---
@@ -52,7 +62,7 @@ Five corrections from the legacy state are folded into this build during the sca
 | OQ | Decision | Rationale |
 |---|---|---|
 | **OQ-1** | **AI Import provider: Anthropic Claude (Haiku model)** | Aligns with stated brand, leverages Adir's existing Claude subscription, matches every doc reference. The legacy edge function (which used Gemini) is not ported — re-implemented against the Anthropic API. |
-| **OQ-15** | **Neema: deferred to Phase 9 (post-MVP roadmap)** | Not present anywhere in the legacy code or docs. Use cases (foreign-worker prepaid cards, payroll routing, escrow) all sit beyond MVP scope. Logged in `DECISIONS_LOG.md` so it's not lost. |
+| **OQ-15** | **Neema: deferred to post-MVP roadmap** | Not present anywhere in the legacy code or docs. Use cases (foreign-worker prepaid cards, payroll routing, escrow) all sit beyond MVP scope. Logged in `DECISIONS_LOG.md` so it's not lost. |
 | **OQ-16** | **Hostel slugs: `jerusalem`, `tel-aviv`, `haifa`, `tiberias`** (kebab-case) | Four hostels live in the AM HOSTELS portfolio. Slug `tel-aviv` (with separator) is canonical going forward. |
 | **OQ-26** | **Email provider: Resend** | Already CSP-allowlisted in legacy; transactional-email focus matches the use cases (KYC, contract events, booking confirmations); clean React Email integration. |
 | **OQ-27** | **Env strategy: legacy `.env.local` + new `.env.example`** | Adir provides the legacy `.env.local`; Phase 0 generates a sanitized `.env.example` template for the repo. Merge rules in §3.E. |
@@ -63,13 +73,13 @@ Five corrections from the legacy state are folded into this build during the sca
 | OQ | Decision |
 |---|---|
 | **OQ-2** | Drop `hostel_bookings.stripe_session_id`. **Drop all legacy columns no longer needed** — the rebuild does not carry over dead schema. |
-| **OQ-3 + OQ-4** | Single source of truth for roles. Enum: `user_role` with values `('owner_individual', 'owner_company', 'construction_corporation', 'admin')`. The `profiles.role` text column is replaced by this enum. The `handle_new_user()` trigger reads role from `raw_user_meta_data.role` with a default of `owner_company` (MVP launches the supply-side product for property-management companies). `owner_individual` is reserved but unreachable in MVP signup — activated in a future phase. `construction_corporation` and `admin` are admin-invited via Studio. The legacy roles `manager_property`, `field_staff`, `ops`, `company`, `admin_corporate`, `b2c_owner`, `corporate_member`, `b2b_owner` are not part of MVP. *Superseded 2026-05-05 from the original CP-1 lock — see `DECISIONS_LOG.md` 2026-05-05 for rationale.* |
+| **OQ-3 + OQ-4** | Single source of truth for roles. Enum: `user_role` with values `('owner_individual', 'owner_company', 'construction_corporation', 'admin')`. The `profiles.role` text column is replaced by this enum. The `handle_new_user()` trigger reads role from `raw_user_meta_data.role` with a default of `owner_company`. **Two roles are signupable in MVP:** `owner_company` (supply-side, lists properties) and `construction_corporation` (demand-side, books properties). Sign-up persona picker offers three options: "company" (creates `owner_company`), "construction corporation" (creates `construction_corporation`), and "individual" (no account created — friendly "coming soon" message). `owner_individual` is reserved but unreachable in MVP signup — activated in a future phase. `admin` is admin-invited via Studio. The legacy roles `manager_property`, `field_staff`, `ops`, `company`, `admin_corporate`, `b2c_owner`, `corporate_member`, `b2b_owner` are not part of MVP. *Superseded twice — original CP-1 lock 2026-05-02 used b2c/b2b naming; 2026-05-05 changed enum names; 2026-05-06 added `construction_corporation` as signupable. See `DECISIONS_LOG.md` for rationale.* |
 | **OQ-6** | `listings.verification_level smallint NOT NULL CHECK (verification_level IN (1,2,3))`. Legacy `verification_tier` A/B/C is dropped. **Naming alignment everywhere:** DB column `verification_level`; TS type `VerificationLevel`; component `VerificationLevelBadge`; SCSS module `VerificationLevelBadge.module.scss`. Hebrew UI labels are independent and follow the brand glossary. |
 | **OQ-7** | `get_signed_url()` is rewritten to use Supabase's native `storage.create_signed_url()` helper — no hardcoded project URL. |
 | **OQ-17** | All hostel slugs in DB use kebab-case (`tel-aviv`, not `telaviv`). Schema CHECK constraint updated. |
 | **OQ-24** | `KpiCard.module.scss` uses `inset-inline-end` instead of physical `left`. |
 | **OQ-25** | `DataTable.module.scss` uses `text-align: end` instead of physical `right`. |
-| **OQ-20** | Faux bold for Heebo/Assistant 500/700/800 accepted for MVP. Real weights ported in Phase 8 polish. |
+| **OQ-20** | Faux bold for Heebo/Assistant 500/700/800 accepted for MVP. Real weights ported in Phase 5 production readiness. |
 
 ### §3.C — Documentation hygiene (handled in Phase 0)
 
@@ -133,6 +143,58 @@ ANTHROPIC_API_KEY=
 # ───── Cron secrets ─────
 CRON_SECRET=
 ```
+
+### §3.F — MVP scope re-lock (2026-05-06)
+
+The original BUILD_PLAN had eight phases (Phase 4 corporate dashboard, Phase 5 marketplace, Phase 6 hostel booking engine, etc.). Following business-side direction, MVP is re-scoped to two production-ready surfaces:
+
+**Ships in MVP:**
+
+1. **B2B marketplace.** Public homepage + browseable listings + listing detail page. Owner-companies (`owner_company` role) sign up and manage their listings (create / edit / archive / view-mine). Construction corporations (`construction_corporation` role) sign up, browse the marketplace, and request to book a property. The owner-company accepts or rejects. On accept, the corporation pays the full stay upfront + OZ commission via Pelecard Link b'Click. Both parties sign a standardized lease via HelloSign. Booking moves to `confirmed` and contact details are exchanged.
+
+2. **Hostels page.** Public route `/hostels` showing four cards for the AM HOSTELS properties (Jerusalem / Tel Aviv / Haifa / Tiberias). Each card links out to FrontDeskMaster's hosted booking URL. The same four cards appear on the homepage as a strip.
+
+**Deferred (not in MVP):**
+
+- Corporate dashboard (KPIs, activity feed, charts, AI Import, Excel reporting, role-based corporate permissions, bulk worker upload)
+- B2C / individual-owner product (`owner_individual` enum value reserved but no signup path)
+- Native hostel booking engine (FDM link-out is MVP; embed and own-it are future phases per `DECISIONS_LOG.md` 2026-05-06)
+- Yield calculator
+- Virtual tours
+- Ratings & reviews
+- Tier-3 verification (paid on-site inspection)
+- Neema fintech integration
+- Premium listing tiers / featured placement
+
+**Production-ready means production-ready.** No half-built features visible to users in production. Code that's not part of MVP simply doesn't exist in the codebase yet — no feature-flagged routes that show "coming soon," no stubbed pages. See §3.G for the feature-flag pattern.
+
+### §3.G — Feature flag pattern
+
+Three flag patterns exist; the project uses two of them deliberately:
+
+| Pattern | Description | When to use |
+|---|---|---|
+| **A. Build-time flag** (`process.env.FEATURE_X === 'on'`) | Code bundled but route gated. Hard to flip without deploy. | Not used. |
+| **B. Runtime config flag** (`feature_flags` table or env var) | Code bundled, behavior toggles at runtime. | **Used for navigation entries** so we can build the full IA (sidebar items, footer links) for design holism, hiding entries whose target screens aren't shipped. Default off in production. |
+| **C. Code that doesn't exist** | Feature not built; route returns 404. | **Used for any screen behind unbuilt features.** No `(corporate)/dashboard/page.tsx` returning "coming soon." The route doesn't exist until we build it. |
+
+**The combination:** nav items can be visually present (option B) for design balance, but every visible nav item leads to a real, complete screen (option C). In MVP production, the navigation is sparse — only `/`, `/hostels`, `/listings`, the listing-detail pages, the listing-management pages, the auth pages, and the corporation's bookings page exist. Everything else is hidden by flag and unbuilt.
+
+The flag implementation is a single Postgres table:
+
+```sql
+CREATE TABLE public.feature_flags (
+  key   text PRIMARY KEY,
+  value boolean NOT NULL DEFAULT false,
+  notes text
+);
+```
+
+Read at the server boundary; cached for the request. Admin-only mutation via Studio. Phase 4 introduces this table; Phase 5 (production readiness) hardens it.
+
+### §3.H — Env name correction
+
+`TWILIO_SMS_FROM` is the canonical env var name (matches your existing `.env.local`). The Phase 0 `.env.example` template wrote `TWILIO_OTP_FROM_NUMBER` — that is corrected in Phase 3. The names refer to the same value: the Twilio phone number used as the source for OTP SMS.
 
 ---
 
@@ -379,35 +441,23 @@ Each phase is an atomic deliverable to Claude Code. You commit after each phase,
 
 **→ Checkpoint CP-3.** Run on staging before any production deploy.
 
-### Phase 4 — Corporate dashboard (B2B)
+### Phase 4 — Marketplace + booking flow + hostels page
 
-KPI cards, activity feed, charts, alert strips, AI banner shell, 7-tab structure. Full corporate schema migration (companies, properties, workers, contracts, reports).
+The biggest phase in the new plan. Three checkpoints inside it.
 
-### Phase 5 — Marketplace (B2C)
+**CP-4a — Listings & management.** Migration adds `listings` table, `listing_images` table, `feature_flags` table, RLS policies. Owner-companies get screens to create / edit / archive / list-their-own listings. Image upload via Supabase Storage. By end of CP-4a, an `owner_company` user can publish a complete listing end-to-end on local Supabase.
 
-Hero, search bar, listing cards, trust band, filters. Owner onboarding KYC steps. Property publication wizard.
+**CP-4b — Public surface + browse + booking request.** Public homepage at `/` reusing the structure from the existing workerhome.co.il (hero with dual CTAs, hostels strip, listings preview, "how it works", legal callout, owner-side pitch, FAQ, footer — but with B2C/calculator/testimonials sections removed per §3.F MVP scope). Public marketplace at `/listings` with search and filters. Public listing detail at `/listings/[id]`. Construction-corporation users can submit a "request to book" with date range. Hostels page at `/hostels` with four FDM link-out cards.
 
-### Phase 6 — Hostel booking engine (isolated)
+**CP-4c — Pelecard + HelloSign integration.** Owner-company accepts or rejects booking requests. On accept, Pelecard Link b'Click payment URL is generated for the corporation, total = full stay + OZ commission. Webhook updates booking status on payment. HelloSign signing request sent to both parties with the standardized lease template. Webhook updates booking to `confirmed` on signed-by-both. Email notifications via Resend at every state transition. Bookings list view for the corporation (the minimum dashboard surface they need).
 
-Separate migration. Zero FKs to corporate tables. Replicates legacy `hostel_bookings` schema minus all legacy/dead columns. Four hostels per §3.A (OQ-16). Pelecard integration mirroring Pakal Nofesh pattern.
+### Phase 5 — Production readiness
 
-### Phase 7 — Integrations
+Real Supabase project provisioned (replaces local). Domain wired. Cron jobs (`health-check`, `vercel-monitor`, `qa-checks`) deployed and validated. Real font weights ported (resolves OQ-20). Lighthouse + a11y audit. Rate limits, monitoring, error tracking. End-to-end smoke against production. Final visual regression review against existing workerhome.co.il at three breakpoints.
 
-Twilio · HelloSign · Pelecard (already in Phase 6) · Resend · AI Import (Anthropic Claude Haiku per OQ-1).
+### Future-roadmap (NOT MVP — explicitly gated)
 
-### Phase 8 — Production readiness
-
-- Real font weights ported (resolves OQ-20).
-- Cron jobs: `health-check`, `vercel-monitor`, `qa-checks` (per OQ-29).
-- Visual regression review against `corporate_assets_full.html`, `marketplace_ui_kit.html`, `AM_Hostels_Booking_System.html` at all three breakpoints.
-- Lighthouse + a11y audit.
-- Rate limits, monitoring, error tracking.
-
-### Phase 9 — Future-roadmap (NOT MVP — explicitly gated)
-
-- **Neema integration** (per OQ-15) — deferred until product validates the need.
-- Virtual tour (`BOOKING_SYSTEM_DREAMS.md`).
-- Anything else flagged "future-roadmap" in `docs/specs/dreams/`.
+Everything in §3.F's "Deferred" list. Tracked in `docs/specs/dreams/` and `TASKS.md` Future-roadmap section. No code lives in main for these.
 
 ---
 
@@ -455,20 +505,20 @@ The fresh `TASKS.md` opens with a phase tracker:
 **Phase 0 — Scaffold** · Started: YYYY-MM-DD · Status: in progress
 
 ## Phase tracker
-- [ ] Phase 0 — Scaffold + token system + docs skeleton
-- [ ] CP-2 — Token + RTL + typography review
-- [ ] Phase 1 — Primitives
-- [ ] CP-1.5 — Primitives visual review at 375 / 768 / 1280
-- [ ] Phase 2 — Layout & navigation
-- [ ] CP-2.5 — Layout chrome visual review at 375 / 768 / 1280
+- [x] Phase 0 — Scaffold + token system + docs skeleton
+- [x] CP-2 — Token + RTL + typography review
+- [x] Phase 1 — Primitives
+- [x] CP-1.5 — Primitives visual review at 375 / 768 / 1280
+- [x] Phase 2 — Layout & navigation
+- [x] CP-2.5 — Layout chrome visual review at 375 / 768 / 1280
 - [ ] Phase 3 — Auth & RLS foundation
 - [ ] CP-3a — Migrations + schema verified on local Supabase
 - [ ] CP-3b — Auth UI + sign-in flow verified
-- [ ] Phase 4 — Corporate dashboard
-- [ ] Phase 5 — Marketplace
-- [ ] Phase 6 — Hostel booking engine
-- [ ] Phase 7 — Integrations
-- [ ] Phase 8 — Production readiness
+- [ ] Phase 4 — Marketplace + booking flow + hostels
+- [ ] CP-4a — Listings schema + management UI
+- [ ] CP-4b — Public homepage + browse + listing detail + hostels page
+- [ ] CP-4c — Pelecard + HelloSign + booking lifecycle
+- [ ] Phase 5 — Production readiness
 
 ## Next-up (within active phase)
 …
@@ -476,9 +526,17 @@ The fresh `TASKS.md` opens with a phase tracker:
 ## Blocked
 …
 
-## Future-roadmap (Phase 9+)
+## Future-roadmap (post-MVP)
+- [ ] **Hostels: convert link-out to embedded FDM component** (DECISIONS_LOG 2026-05-06)
+- [ ] **Hostels: replace embedded FDM with own native booking engine** (or skip embed and go straight to native if engineering capacity allows)
+- [ ] B2/B3 self-serve persona-picker — activate `owner_individual` self-serve when individual product launches
+- [ ] Corporate dashboard (KPIs, AI Import, Excel reports, role-based corporate permissions, bulk worker upload)
+- [ ] Yield calculator
+- [ ] Ratings & reviews
+- [ ] Tier-3 verification (paid on-site inspection)
+- [ ] Virtual tours
 - [ ] Neema integration (OQ-15)
-- [ ] Virtual tour
+- [ ] Premium listing tiers / featured placement
 - [ ] Other items from docs/specs/dreams/
 ```
 
