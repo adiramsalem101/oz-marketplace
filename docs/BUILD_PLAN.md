@@ -15,10 +15,11 @@ oz-marketplace is a new project inspired by `worker-housing-platform` (legacy). 
 | **CP-1** (this doc) | All decisions in §3, scales in §4, architecture in §5, build sequence in §6 | ✅ locked |
 | **CP-2** | Generated `_tokens.scss`, global stylesheet, scaffolded layout | ✅ passed |
 | **CP-1.5** | All nine primitives reviewed at 375 / 768 / 1280px on the demo page | ✅ passed |
-| **CP-2.5** | Layout chrome (Sidebar / Topbar / Tabs / MobileDrawer / AppShell) reviewed at 375 / 768 / 1280px | ⏳ awaits Phase 2 |
-| **CP-3** | Migration SQL run on staging | ⏳ awaits Phase 3 |
+| **CP-2.5** | Layout chrome (Sidebar / Topbar / Tabs / MobileDrawer / AppShell) reviewed at 375 / 768 / 1280px | ✅ passed |
+| **CP-3a** | Migrations applied to local Supabase; schema, RLS, and trigger verified by query | ⏳ awaits Phase 3 |
+| **CP-3b** | Auth UI reviewed at 375 / 768 / 1280px; sign-in produces session against local Supabase; RLS denies unauthenticated access | ⏳ awaits Phase 3 |
 
-CP-1.5 cleared 2026-05-04. Phase 2 prompt is ready in `PROMPT_LIBRARY.md`.
+CP-2.5 cleared 2026-05-05. Phase 3 prompt is ready in `PROMPT_LIBRARY.md`.
 
 ---
 
@@ -62,7 +63,7 @@ Five corrections from the legacy state are folded into this build during the sca
 | OQ | Decision |
 |---|---|
 | **OQ-2** | Drop `hostel_bookings.stripe_session_id`. **Drop all legacy columns no longer needed** — the rebuild does not carry over dead schema. |
-| **OQ-3 + OQ-4** | Single source of truth for roles. Enum: `user_role` with values `('b2c_owner', 'corporate_member', 'b2b_owner', 'admin')` *(lowercased from `B2C_owner / corporate_member / B2B_owner / admin` for PostgreSQL convention)*. The `profiles.role` text column is replaced by this enum. The `handle_new_user()` trigger reads role from `raw_user_meta_data.role` with a default of `b2c_owner`. The legacy roles `manager_property`, `field_staff`, `ops`, `company`, `admin_corporate` are not part of MVP — they can be added later if/when the product needs them. |
+| **OQ-3 + OQ-4** | Single source of truth for roles. Enum: `user_role` with values `('owner_individual', 'owner_company', 'construction_corporation', 'admin')`. The `profiles.role` text column is replaced by this enum. The `handle_new_user()` trigger reads role from `raw_user_meta_data.role` with a default of `owner_company` (MVP launches the supply-side product for property-management companies). `owner_individual` is reserved but unreachable in MVP signup — activated in a future phase. `construction_corporation` and `admin` are admin-invited via Studio. The legacy roles `manager_property`, `field_staff`, `ops`, `company`, `admin_corporate`, `b2c_owner`, `corporate_member`, `b2b_owner` are not part of MVP. *Superseded 2026-05-05 from the original CP-1 lock — see `DECISIONS_LOG.md` 2026-05-05 for rationale.* |
 | **OQ-6** | `listings.verification_level smallint NOT NULL CHECK (verification_level IN (1,2,3))`. Legacy `verification_tier` A/B/C is dropped. **Naming alignment everywhere:** DB column `verification_level`; TS type `VerificationLevel`; component `VerificationLevelBadge`; SCSS module `VerificationLevelBadge.module.scss`. Hebrew UI labels are independent and follow the brand glossary. |
 | **OQ-7** | `get_signed_url()` is rewritten to use Supabase's native `storage.create_signed_url()` helper — no hardcoded project URL. |
 | **OQ-17** | All hostel slugs in DB use kebab-case (`tel-aviv`, not `telaviv`). Schema CHECK constraint updated. |
@@ -461,7 +462,8 @@ The fresh `TASKS.md` opens with a phase tracker:
 - [ ] Phase 2 — Layout & navigation
 - [ ] CP-2.5 — Layout chrome visual review at 375 / 768 / 1280
 - [ ] Phase 3 — Auth & RLS foundation
-- [ ] CP-3 — Migration on staging
+- [ ] CP-3a — Migrations + schema verified on local Supabase
+- [ ] CP-3b — Auth UI + sign-in flow verified
 - [ ] Phase 4 — Corporate dashboard
 - [ ] Phase 5 — Marketplace
 - [ ] Phase 6 — Hostel booking engine

@@ -3799,13 +3799,1212 @@ After commit, print the closing checkpoint banner per §F.4 and exit.
 
 # §Phase 3 — Auth & RLS foundation
 
-**Status:** stubbed. Reaches **CP-3**.
+## §3.1 — Goal
 
-**Goal:** Two Supabase migrations: (1) enums + `profiles` + `auth.users` trigger (persona-aware); (2) RLS skeleton.
+Stand up the database foundation and authentication for oz-marketplace. Local Supabase running via `supabase start`. Two migrations defining the role enum, the profiles table, the persona-aware signup trigger, and the RLS skeleton. Three sign-in methods (Google OAuth, Twilio SMS OTP, email magic-link) on a single sign-in page. A persona-aware sign-up flow that asks "company or individual?" and routes the two paths differently.
 
-**Deliverables:** Schema for the four roles per BUILD_PLAN §3.B. Persona-aware `handle_new_user()` trigger. Google OAuth + Twilio OTP flows under `app/(auth)/`. `verification_level` column landed (used by `VerificationLevelBadge` from Phase 1).
+This phase ends at **two checkpoints**:
+- **CP-3a** — Database & migrations applied to local Supabase, schema and trigger verified by query.
+- **CP-3b** — Auth UI reviewed at 375 / 768 / 1280px; sign-in produces a valid session against local Supabase; RLS blocks unauthenticated access.
 
-**Checkpoint:** CP-3 — migrations run on staging before any production deploy.
+## §3.2 — Inputs
+
+- `docs/BUILD_PLAN.md` — naming, framing, locked decisions.
+- `docs/PROMPT_LIBRARY.md` front-matter (§F.1–§F.6) — governance.
+- `recon/06-legacy-schema.md` — reference only. The new schema is built fresh; do not port the legacy `profiles` shape verbatim.
+- `recon/07-roles-and-rls.md` — reference for the kinds of RLS patterns the legacy uses; new policies follow BUILD_PLAN §3.B.
+- `components/primitives/` from Phase 1 — `Button`, `Input`, `Card`, `Pill`. Reuse them.
+- `components/layout/` from Phase 2 — not used in `app/(auth)/` because auth pages don't sit inside the AppShell.
+
+## §3.3 — Pre-flight checks
+
+```bash
+test "$(basename "$PWD")" = "oz-marketplace" || { echo "FAIL: not in oz-marketplace"; exit 1; }
+git log --oneline | grep -q "phase 2" || { echo "FAIL: phase 2 commit not found"; exit 1; }
+git diff --quiet || { echo "FAIL: working tree dirty"; exit 1; }
+
+# Docker daemon running
+docker info > /dev/null 2>&1 || { echo "FAIL: Docker daemon not running. Start Docker Desktop."; exit 1; }
+
+# Supabase CLI installed
+command -v supabase > /dev/null 2>&1 || { echo "FAIL: supabase CLI not found. Install via 'brew install supabase/tap/supabase'."; exit 1; }
+
+# Required env vars present (values may be empty for now)
+grep -q '^TWILIO_SMS_FROM' .env.local || echo "WARN: TWILIO_SMS_FROM not set in .env.local"
+
+echo "PRE-FLIGHT OK"
+```
+
+If any FAIL: halt per §F.5. If WARN: log it and continue.
+
+## §3.4 — Step 1: Update DECISIONS_LOG and BUILD_PLAN
+
+Before any code or migrations, dump every locked decision from CP-1 through CP-2.5 plus the new Phase 3 decisions into `docs/DECISIONS_LOG.md`. The repo becomes the source of truth; chat history stops being load-bearing.
+
+Open `docs/DECISIONS_LOG.md`. Find the existing CP-1 section (it should already contain the original decisions from Phase 0). After the existing CP-1 block and any Phase 0 / 1 / 2 deviation subsections, append a new top-level dated section:
+
+```markdown
+## 2026-05-05 — Phase 3 decisions (CP-3 prep)
+
+### Auth & roles
+
+- **User role enum SUPERSEDES BUILD_PLAN §3.B original lock.**
+  Original (CP-1, 2026-05-02): `('b2c_owner', 'corporate_member', 'b2b_owner', 'admin')`.
+  New (CP-3 prep, 2026-05-05): `('owner_individual', 'owner_company', 'construction_corporation', 'admin')`.
+  Rationale: the B2C/B2B labels were inherited from manager vocabulary but
+  misrepresent the product. There is no consumer in oz-marketplace; all three
+  non-admin roles are businesses transacting with each other. The new names
+  describe the actual entities: an individual property owner, a property-
+  management company with many listings, and a construction corporation
+  on the demand side.
+
+- **Default role at signup: `owner_company`.**
+  MVP day-one launches the supply-side product for property-management
+  companies. Self-serve signup creates `owner_company` accounts.
+
+- **`owner_individual` enum value reserved but unreachable in MVP.**
+  Defined in the schema, no signup path leads to it. Activated in a later
+  phase when individual-owner self-serve is on the roadmap.
+
+- **`construction_corporation` is admin-invited only.**
+  Created via Supabase Studio by OZ staff. No self-serve signup path.
+  These are high-touch enterprise accounts (e.g., Tnufa, Shikun & Binui)
+  managed by the GTM team.
+
+- **`admin` is OZ staff.** No self-serve signup. Created via Studio.
+
+- **Signup UX is Option C — persona picker before account creation.**
+  Sign-up page asks "האם אתם חברה לניהול נכסים, או פרטיים?" (company or
+  individual). "Company" path proceeds to create an `owner_company`
+  account. "Individual" path renders a "coming soon" message; no account
+  is created and no email is captured.
+
+- **B1 default-to-single-role pattern is locked for MVP.**
+  Self-serve signup writes a fixed role; admins promote to other roles
+  via Studio. Future-roadmap entry: build B2/B3 self-serve persona-picker
+  for `construction_corporation` and `owner_individual` once the
+  individual product launches and signup volume warrants it. (Logged in
+  TASKS.md under Future-roadmap.)
+
+### Auth methods
+
+- **Three sign-in methods on a single `/sign-in` page:**
+  Google OAuth, Twilio SMS OTP, email magic-link. All three handled by
+  Supabase Auth natively. Email/password is intentionally not shipping
+  — magic-link covers the same use case without password storage,
+  reset flows, or "forgot password" UI. Add email/password in Phase 9 if
+  beta feedback requires it.
+
+### Infrastructure
+
+- **Local Supabase via `supabase start` for development.**
+  Docker Desktop and Supabase CLI are required local prerequisites
+  (added to README). Phase 8 (production readiness) provisions the
+  remote Supabase project. No fork-and-clean from the legacy project;
+  the schema is authored fresh from BUILD_PLAN §3.B.
+
+- **`TWILIO_SMS_FROM` is the canonical env var name** for the OTP source
+  number. Aligns with the legacy `.env.local`. The Phase 0 `.env.example`
+  template used `TWILIO_OTP_FROM_NUMBER`; this is corrected in Phase 3.
+```
+
+Then update `docs/BUILD_PLAN.md` §3.B to reflect the new enum values. Find the row for OQ-3 + OQ-4 and replace the enum string. Add a one-line note: *"Superseded 2026-05-05 — see DECISIONS_LOG."* The original decision history stays visible.
+
+## §3.5 — Step 2: Update README.md prerequisites
+
+Open root `README.md`. Find the section about local development setup (or create one if it doesn't exist). Add a Prerequisites subsection at the top of the "Run locally" block:
+
+```markdown
+## Prerequisites
+
+oz-marketplace's local dev stack requires:
+
+- **Node.js 18.18 or higher** — `node -v`
+- **npm** — bundled with Node
+- **Docker Desktop** running — required by Supabase's local stack. Verify with `docker info`.
+- **Supabase CLI** — install via `brew install supabase/tap/supabase` on macOS, or per the [Supabase CLI install docs](https://supabase.com/docs/guides/cli/getting-started). Verify with `supabase --version`.
+- **`.env.local`** — copy `.env.example` and fill in values. See `docs/INTEGRATIONS.md` for what each variable is for.
+
+Without Docker running, `supabase start` will fail and auth flows won't work.
+```
+
+## §3.6 — Step 3: Initialize local Supabase
+
+```bash
+# If supabase/config.toml from Phase 0 already declares project_id, skip init.
+test -f supabase/config.toml || npx -y supabase init --workdir .
+
+# Start the local stack (Docker pulls images on first run; can take 2-5 min)
+supabase start
+```
+
+Capture the output of `supabase start` verbatim — it prints the local URLs and keys. Save the output to a temp file, then extract these for `.env.local` updates:
+
+- `API URL` → `NEXT_PUBLIC_SUPABASE_URL`
+- `anon key` → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `service_role key` → `SUPABASE_SERVICE_ROLE_KEY`
+
+Update `.env.local` (the gitignored file) with these local values. Do **not** update `.env.example`. Print a confirmation that the values are written, but never echo the keys themselves to the session output.
+
+## §3.7 — Step 4: Migration #1 — enums, profiles, signup trigger
+
+Create `supabase/migrations/20260505000001_user_role_and_profiles.sql`:
+
+```sql
+-- ─────────────────────────────────────────────────────────────────
+-- Migration 20260505000001 — user_role enum, profiles, signup trigger
+-- See docs/DECISIONS_LOG.md (2026-05-05 — Phase 3) for rationale.
+-- ─────────────────────────────────────────────────────────────────
+
+-- The role enum. Lowercased per Postgres convention.
+-- Value semantics:
+--   owner_individual         — private person with one or a few properties (RESERVED, unreachable in MVP signup)
+--   owner_company            — property-management company with multiple listings (default at signup)
+--   construction_corporation — demand-side construction company (admin-invited only)
+--   admin                    — OZ staff (admin-invited only)
+CREATE TYPE public.user_role AS ENUM (
+  'owner_individual',
+  'owner_company',
+  'construction_corporation',
+  'admin'
+);
+
+-- Profiles table — one row per auth.users row.
+-- Created automatically by handle_new_user() trigger below.
+CREATE TABLE public.profiles (
+  id              uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  role            public.user_role NOT NULL DEFAULT 'owner_company',
+  full_name       text,
+  phone           text,
+  email           text,
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX profiles_role_idx ON public.profiles(role);
+
+-- Auto-update updated_at on row UPDATE.
+CREATE OR REPLACE FUNCTION public.set_updated_at()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  NEW.updated_at = now();
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER profiles_set_updated_at
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.set_updated_at();
+
+-- handle_new_user(): persona-aware. Reads role from raw_user_meta_data.role
+-- (set during signup by app/(auth)/sign-up flow), defaults to 'owner_company'
+-- if not provided. Validates that the requested role is signupable —
+-- 'owner_individual', 'construction_corporation', and 'admin' are NEVER
+-- assignable via signup; if requested, the trigger silently coerces to the
+-- default. Promotion to those roles is admin-only via Studio.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  requested_role text;
+  final_role public.user_role;
+BEGIN
+  requested_role := NEW.raw_user_meta_data ->> 'role';
+
+  -- Only 'owner_company' is signupable in MVP.
+  -- Anything else (including null / absent) coerces to the default.
+  IF requested_role = 'owner_company' THEN
+    final_role := 'owner_company';
+  ELSE
+    final_role := 'owner_company';
+  END IF;
+
+  INSERT INTO public.profiles (id, role, email, phone, full_name)
+  VALUES (
+    NEW.id,
+    final_role,
+    NEW.email,
+    NEW.phone,
+    NEW.raw_user_meta_data ->> 'full_name'
+  );
+
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW
+  EXECUTE FUNCTION public.handle_new_user();
+
+COMMENT ON TYPE public.user_role IS 'User role enum. See docs/DECISIONS_LOG.md 2026-05-05 for semantics.';
+COMMENT ON TABLE public.profiles IS 'One row per auth.users row, created by handle_new_user trigger.';
+COMMENT ON FUNCTION public.handle_new_user() IS 'Trigger that creates a profiles row on auth.users INSERT. Coerces role to owner_company in MVP.';
+```
+
+> **Note on the trigger logic:** the `IF/ELSE` branches both assign `'owner_company'`. This is intentional — it documents that we *considered* the requested role and chose to ignore it. When the next phase opens up `owner_individual` self-serve, the IF branch becomes meaningful and we'll add an ELSIF for `'owner_individual'`. Keeping the structure now means the future change is one ELSIF, not a rewrite.
+
+## §3.8 — Step 5: Migration #2 — RLS skeleton
+
+Create `supabase/migrations/20260505000002_profiles_rls.sql`:
+
+```sql
+-- ─────────────────────────────────────────────────────────────────
+-- Migration 20260505000002 — RLS skeleton for profiles
+-- ─────────────────────────────────────────────────────────────────
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
+
+-- Authenticated users can SELECT their own profile row only.
+CREATE POLICY "profiles_select_own"
+  ON public.profiles
+  FOR SELECT
+  TO authenticated
+  USING (auth.uid() = id);
+
+-- Authenticated users can UPDATE their own profile row only,
+-- and they cannot change their role (admins do that via service role).
+CREATE POLICY "profiles_update_own"
+  ON public.profiles
+  FOR UPDATE
+  TO authenticated
+  USING (auth.uid() = id)
+  WITH CHECK (
+    auth.uid() = id
+    AND role = (SELECT role FROM public.profiles WHERE id = auth.uid())
+  );
+
+-- INSERT is handled by the handle_new_user() trigger only.
+-- No policy means no client-side INSERT path is allowed.
+-- Service role bypasses RLS, so admin operations work via the service-role key.
+
+-- DELETE is admin-only; no policy means clients cannot delete profiles.
+-- Cascading DELETE from auth.users is handled by the FK ON DELETE CASCADE.
+```
+
+## §3.9 — Step 6: Apply migrations to local Supabase
+
+```bash
+supabase db reset
+```
+
+This drops and recreates the local DB, applying every migration in `supabase/migrations/` in order. Capture verbatim output. PASS iff exit 0 and the output mentions both new migration files.
+
+## §3.10 — Step 7: CP-3a self-tests (database verified)
+
+### Test 1 — Enum exists with correct values
+
+```bash
+supabase db query "SELECT unnest(enum_range(NULL::public.user_role)) AS value;"
+```
+
+PASS iff output contains exactly four rows: `owner_individual`, `owner_company`, `construction_corporation`, `admin`.
+
+### Test 2 — profiles table has expected columns
+
+```bash
+supabase db query "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'profiles' ORDER BY ordinal_position;"
+```
+
+PASS iff output includes `id`, `role`, `full_name`, `phone`, `email`, `created_at`, `updated_at` with reasonable types.
+
+### Test 3 — RLS is enabled on profiles
+
+```bash
+supabase db query "SELECT relrowsecurity FROM pg_class WHERE relname = 'profiles';"
+```
+
+PASS iff result is `t`.
+
+### Test 4 — Trigger exists
+
+```bash
+supabase db query "SELECT trigger_name FROM information_schema.triggers WHERE event_object_table = 'users' AND trigger_schema = 'auth';"
+```
+
+PASS iff `on_auth_user_created` is in the result.
+
+### Test 5 — Trigger fires correctly on signup (smoke test)
+
+```bash
+# Create a test auth.users row directly via the service role.
+# Verify a profiles row was auto-created with role = 'owner_company'.
+supabase db query "
+INSERT INTO auth.users (id, email, encrypted_password, raw_user_meta_data)
+VALUES (gen_random_uuid(), 'test-cp3a@example.com', '', '{\"role\":\"owner_company\"}'::jsonb);
+
+SELECT p.role FROM public.profiles p
+JOIN auth.users u ON u.id = p.id
+WHERE u.email = 'test-cp3a@example.com';
+"
+```
+
+PASS iff result is exactly `owner_company`.
+
+### Test 6 — Trigger coerces invalid role requests
+
+```bash
+supabase db query "
+INSERT INTO auth.users (id, email, encrypted_password, raw_user_meta_data)
+VALUES (gen_random_uuid(), 'test-coerce@example.com', '', '{\"role\":\"admin\"}'::jsonb);
+
+SELECT p.role FROM public.profiles p
+JOIN auth.users u ON u.id = p.id
+WHERE u.email = 'test-coerce@example.com';
+"
+```
+
+PASS iff result is `owner_company` — the trigger ignored the malicious `admin` request and coerced to default.
+
+### Test 7 — Cleanup
+
+```bash
+supabase db query "DELETE FROM auth.users WHERE email IN ('test-cp3a@example.com', 'test-coerce@example.com');"
+```
+
+Should run without error.
+
+---
+
+After all CP-3a tests pass, print the CP-3a banner per §F.4 and stop. Wait for `continue` before moving to CP-3b. Do **not** start the auth UI work until the user has reviewed CP-3a.
+
+```
+═══════════════════════════════════════════
+PHASE 3 PART A COMPLETE — CHECKPOINT CP-3a REACHED
+═══════════════════════════════════════════
+```
+
+After `continue`, proceed to §3.11.
+
+## §3.11 — Step 8: Supabase clients
+
+Create `lib/supabase/server.ts`:
+
+```ts
+import { createServerClient as createServerClientImpl } from '@supabase/ssr';
+import { cookies } from 'next/headers';
+
+/**
+ * Server-side Supabase client for use in Server Components, Route Handlers,
+ * and Server Actions. Reads/writes auth cookies via Next's cookies() API.
+ */
+export async function createServerClient() {
+  const cookieStore = await cookies();
+
+  return createServerClientImpl(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return cookieStore.getAll();
+        },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) =>
+              cookieStore.set(name, value, options),
+            );
+          } catch {
+            // setAll called from Server Component — ignore.
+            // Middleware refreshes the session cookies; this is fine.
+          }
+        },
+      },
+    },
+  );
+}
+```
+
+Create `lib/supabase/browser.ts`:
+
+```ts
+'use client';
+
+import { createBrowserClient as createBrowserClientImpl } from '@supabase/ssr';
+
+/**
+ * Browser-side Supabase client for use in Client Components.
+ * Cached singleton so we don't re-create on every render.
+ */
+let client: ReturnType<typeof createBrowserClientImpl> | undefined;
+
+export function createBrowserClient() {
+  if (client) return client;
+  client = createBrowserClientImpl(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  );
+  return client;
+}
+```
+
+Create `middleware.ts` at the repo root:
+
+```ts
+import { createServerClient } from '@supabase/ssr';
+import { NextResponse, type NextRequest } from 'next/server';
+
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({ request });
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet) {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options),
+          );
+        },
+      },
+    },
+  );
+
+  // Refresh the session so SSR has fresh auth state.
+  await supabase.auth.getUser();
+
+  return response;
+}
+
+export const config = {
+  matcher: [
+    /*
+     * Match all request paths except:
+     *  - _next/static (static files)
+     *  - _next/image (image optimization)
+     *  - favicon.ico, icons.svg, fonts/
+     *  - public assets
+     */
+    '/((?!_next/static|_next/image|favicon.ico|icons.svg|fonts).*)',
+  ],
+};
+```
+
+## §3.12 — Step 9: Auth pages
+
+### `app/(auth)/layout.tsx`
+
+```tsx
+import type { Metadata } from 'next';
+import styles from './layout.module.scss';
+
+export const metadata: Metadata = {
+  title: 'עוז · התחברות',
+};
+
+export default function AuthLayout({ children }: { children: React.ReactNode }) {
+  return <div className={styles.frame}>{children}</div>;
+}
+```
+
+### `app/(auth)/layout.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.frame {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: t.space(5);
+  background: t.color(bg-soft);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(10);
+  }
+}
+```
+
+### `app/(auth)/sign-in/page.tsx`
+
+```tsx
+import { Card } from '@/components/primitives/Card/Card';
+import { SignInMethods } from './SignInMethods';
+import styles from './page.module.scss';
+
+export default function SignInPage() {
+  return (
+    <Card variant="elevated" className={styles.card}>
+      <header className={styles.header}>
+        <h1>ברוכים הבאים לעוז</h1>
+        <p>בחרו אופן התחברות</p>
+      </header>
+      <SignInMethods />
+    </Card>
+  );
+}
+```
+
+### `app/(auth)/sign-in/page.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.card {
+  width: 100%;
+  max-width: 440px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+  margin-block-end: t.space(6);
+  text-align: center;
+
+  h1 {
+    font-size: t.font-size(2xl);
+  }
+
+  p {
+    color: t.color(fg-muted);
+  }
+}
+```
+
+### `app/(auth)/sign-in/SignInMethods.tsx`
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/primitives/Button/Button';
+import { Input } from '@/components/primitives/Input/Input';
+import { Icon } from '@/components/primitives/Icon/Icon';
+import { createBrowserClient } from '@/lib/supabase/browser';
+import styles from './SignInMethods.module.scss';
+
+type Status =
+  | { kind: 'idle' }
+  | { kind: 'loading' }
+  | { kind: 'sent'; method: 'email' | 'sms' }
+  | { kind: 'error'; message: string };
+
+export function SignInMethods() {
+  const supabase = createBrowserClient();
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [status, setStatus] = useState<Status>({ kind: 'idle' });
+
+  async function handleGoogle() {
+    setStatus({ kind: 'loading' });
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/callback` },
+    });
+    if (error) setStatus({ kind: 'error', message: error.message });
+  }
+
+  async function handleEmail(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email) return;
+    setStatus({ kind: 'loading' });
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: `${window.location.origin}/callback` },
+    });
+    if (error) {
+      setStatus({ kind: 'error', message: error.message });
+    } else {
+      setStatus({ kind: 'sent', method: 'email' });
+    }
+  }
+
+  async function handlePhone(e: React.FormEvent) {
+    e.preventDefault();
+    if (!phone) return;
+    setStatus({ kind: 'loading' });
+    const { error } = await supabase.auth.signInWithOtp({ phone });
+    if (error) {
+      setStatus({ kind: 'error', message: error.message });
+    } else {
+      setStatus({ kind: 'sent', method: 'sms' });
+    }
+  }
+
+  if (status.kind === 'sent') {
+    return (
+      <div className={styles.sent}>
+        <h2>בדקו את {status.method === 'email' ? 'המייל' : 'הטלפון'}</h2>
+        <p>שלחנו לכם קישור / קוד התחברות.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.methods}>
+      <Button
+        variant="ghost"
+        fullWidth
+        onClick={handleGoogle}
+        disabled={status.kind === 'loading'}
+        iconStart={<Icon name="google" size="base" aria-label="Google" />}
+      >
+        המשך עם Google
+      </Button>
+
+      <div className={styles.divider}><span>או</span></div>
+
+      <form onSubmit={handleEmail} className={styles.form}>
+        <Input
+          type="email"
+          label="מייל"
+          placeholder="you@company.co.il"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          fullWidth
+        />
+        <Button type="submit" variant="blue" fullWidth disabled={!email || status.kind === 'loading'}>
+          שלחו לי קישור התחברות
+        </Button>
+      </form>
+
+      <div className={styles.divider}><span>או</span></div>
+
+      <form onSubmit={handlePhone} className={styles.form}>
+        <Input
+          type="tel"
+          label="טלפון"
+          placeholder="050-1234567"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          fullWidth
+        />
+        <Button type="submit" variant="blue" fullWidth disabled={!phone || status.kind === 'loading'}>
+          שלחו לי קוד SMS
+        </Button>
+      </form>
+
+      {status.kind === 'error' ? (
+        <p className={styles.error}>{status.message}</p>
+      ) : null}
+
+      <footer className={styles.footer}>
+        <span>חדשים כאן? </span>
+        <a href="/sign-up">צרו חשבון</a>
+      </footer>
+    </div>
+  );
+}
+```
+
+If `google` isn't a real symbol in `public/icons.svg`, omit the `iconStart` prop or substitute a generic icon. Do not invent symbol IDs.
+
+### `app/(auth)/sign-in/SignInMethods.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.methods {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(4);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  color: t.color(fg-faint);
+  font-size: t.font-size(sm);
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: t.color(border-default);
+  }
+}
+
+.error {
+  color: t.color(red-600);
+  font-size: t.font-size(sm);
+  text-align: center;
+}
+
+.sent {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+  text-align: center;
+
+  h2 {
+    font-size: t.font-size(xl);
+  }
+
+  p {
+    color: t.color(fg-muted);
+  }
+}
+
+.footer {
+  text-align: center;
+  font-size: t.font-size(sm);
+  color: t.color(fg-muted);
+
+  a {
+    color: t.color(blue-deep);
+    font-weight: t.font-weight(bold);
+  }
+}
+```
+
+### `app/(auth)/sign-up/page.tsx`
+
+Persona picker. Asks "company or individual?" before any account is created.
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/primitives/Button/Button';
+import { Card } from '@/components/primitives/Card/Card';
+import { SignUpCompany } from './SignUpCompany';
+import { SignUpIndividualSoon } from './SignUpIndividualSoon';
+import styles from './page.module.scss';
+
+type Persona = null | 'company' | 'individual';
+
+export default function SignUpPage() {
+  const [persona, setPersona] = useState<Persona>(null);
+
+  if (persona === 'company') return <SignUpCompany onBack={() => setPersona(null)} />;
+  if (persona === 'individual') return <SignUpIndividualSoon onBack={() => setPersona(null)} />;
+
+  return (
+    <Card variant="elevated" className={styles.card}>
+      <header className={styles.header}>
+        <h1>הצטרפו לעוז</h1>
+        <p>איזה סוג חשבון תרצו לפתוח?</p>
+      </header>
+
+      <div className={styles.choices}>
+        <Button variant="cta" fullWidth onClick={() => setPersona('company')}>
+          חברה לניהול נכסים
+        </Button>
+        <Button variant="ghost" fullWidth onClick={() => setPersona('individual')}>
+          אני בעל נכס פרטי
+        </Button>
+      </div>
+
+      <footer className={styles.footer}>
+        <span>כבר יש לכם חשבון? </span>
+        <a href="/sign-in">התחברו</a>
+      </footer>
+    </Card>
+  );
+}
+```
+
+### `app/(auth)/sign-up/page.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.card {
+  width: 100%;
+  max-width: 440px;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+  margin-block-end: t.space(6);
+  text-align: center;
+
+  h1 {
+    font-size: t.font-size(2xl);
+  }
+
+  p {
+    color: t.color(fg-muted);
+  }
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+}
+
+.footer {
+  text-align: center;
+  margin-block-start: t.space(6);
+  font-size: t.font-size(sm);
+  color: t.color(fg-muted);
+
+  a {
+    color: t.color(blue-deep);
+    font-weight: t.font-weight(bold);
+  }
+}
+```
+
+### `app/(auth)/sign-up/SignUpCompany.tsx`
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { Button } from '@/components/primitives/Button/Button';
+import { Card } from '@/components/primitives/Card/Card';
+import { Input } from '@/components/primitives/Input/Input';
+import { createBrowserClient } from '@/lib/supabase/browser';
+import styles from './SignUpCompany.module.scss';
+
+export function SignUpCompany({ onBack }: { onBack: () => void }) {
+  const supabase = createBrowserClient();
+  const [email, setEmail] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'sent' | string>('idle');
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email || !companyName) return;
+    setStatus('loading');
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        data: { role: 'owner_company', full_name: companyName },
+        emailRedirectTo: `${window.location.origin}/callback`,
+      },
+    });
+    if (error) setStatus(error.message);
+    else setStatus('sent');
+  }
+
+  if (status === 'sent') {
+    return (
+      <Card variant="elevated" className={styles.card}>
+        <h2>בדקו את המייל</h2>
+        <p>שלחנו קישור הפעלה ל-{email}</p>
+      </Card>
+    );
+  }
+
+  return (
+    <Card variant="elevated" className={styles.card}>
+      <header className={styles.header}>
+        <h1>חשבון חברה</h1>
+      </header>
+      <form onSubmit={handleSubmit} className={styles.form}>
+        <Input
+          label="שם החברה"
+          placeholder="לדוגמה: נכסי גליל בע״מ"
+          value={companyName}
+          onChange={(e) => setCompanyName(e.target.value)}
+          fullWidth
+        />
+        <Input
+          type="email"
+          label="מייל"
+          placeholder="contact@company.co.il"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          fullWidth
+        />
+        <Button type="submit" variant="cta" fullWidth disabled={!email || !companyName || status === 'loading'}>
+          המשך
+        </Button>
+        <Button type="button" variant="ghost" fullWidth onClick={onBack}>
+          חזרה
+        </Button>
+        {typeof status === 'string' && status !== 'idle' && status !== 'loading' && status !== 'sent' ? (
+          <p className={styles.error}>{status}</p>
+        ) : null}
+      </form>
+    </Card>
+  );
+}
+```
+
+### `app/(auth)/sign-up/SignUpCompany.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.card {
+  width: 100%;
+  max-width: 440px;
+}
+
+.header {
+  text-align: center;
+  margin-block-end: t.space(6);
+
+  h1 {
+    font-size: t.font-size(2xl);
+  }
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+}
+
+.error {
+  color: t.color(red-600);
+  font-size: t.font-size(sm);
+  text-align: center;
+}
+```
+
+### `app/(auth)/sign-up/SignUpIndividualSoon.tsx`
+
+```tsx
+'use client';
+
+import { Button } from '@/components/primitives/Button/Button';
+import { Card } from '@/components/primitives/Card/Card';
+import styles from './SignUpIndividualSoon.module.scss';
+
+export function SignUpIndividualSoon({ onBack }: { onBack: () => void }) {
+  return (
+    <Card variant="elevated" className={styles.card}>
+      <header className={styles.header}>
+        <h1>בקרוב 🏗</h1>
+        <p>
+          עוז עדיין לא פתוחה לבעלי נכסים פרטיים. אנחנו מתחילים עם חברות לניהול
+          נכסים, ובקרוב נפתח גם לפרטיים.
+        </p>
+        <p>חזרו לבקר אותנו בקרוב.</p>
+      </header>
+      <Button variant="ghost" fullWidth onClick={onBack}>
+        חזרה
+      </Button>
+    </Card>
+  );
+}
+```
+
+### `app/(auth)/sign-up/SignUpIndividualSoon.module.scss`
+
+```scss
+@use "@/styles/tokens" as t;
+
+.card {
+  width: 100%;
+  max-width: 440px;
+  text-align: center;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+  margin-block-end: t.space(6);
+
+  h1 {
+    font-size: t.font-size(3xl);
+  }
+
+  p {
+    color: t.color(fg-muted);
+  }
+}
+```
+
+### `app/(auth)/callback/route.ts`
+
+```ts
+import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@/lib/supabase/server';
+
+/**
+ * OAuth callback handler. Exchanges the `code` query param for a session,
+ * then redirects to `/` (or to the `next` param if provided).
+ */
+export async function GET(request: NextRequest) {
+  const url = new URL(request.url);
+  const code = url.searchParams.get('code');
+  const next = url.searchParams.get('next') ?? '/';
+
+  if (code) {
+    const supabase = await createServerClient();
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) {
+      return NextResponse.redirect(new URL(`/sign-in?error=${encodeURIComponent(error.message)}`, request.url));
+    }
+  }
+
+  return NextResponse.redirect(new URL(next, request.url));
+}
+```
+
+### `app/(auth)/sign-out/route.ts`
+
+```ts
+import { NextResponse, type NextRequest } from 'next/server';
+import { createServerClient } from '@/lib/supabase/server';
+
+export async function POST(request: NextRequest) {
+  const supabase = await createServerClient();
+  await supabase.auth.signOut();
+  return NextResponse.redirect(new URL('/sign-in', request.url));
+}
+```
+
+## §3.13 — Step 10: TASKS.md future-roadmap entry
+
+Open `docs/TASKS.md`. Add to the "Future-roadmap (Phase 9+)" section:
+
+```markdown
+- [ ] B2/B3 self-serve persona-picker for sign-up (DECISIONS_LOG 2026-05-05).
+      Activate `owner_individual` self-serve when individual-product launches.
+      Add `construction_corporation` self-serve if/when GTM model shifts away
+      from high-touch invitation.
+```
+
+## §3.14 — CP-3b self-tests (auth UI)
+
+### Test A — TypeScript compiles
+
+```bash
+npx tsc --noEmit
+```
+
+PASS iff exit 0.
+
+### Test B — Lint passes
+
+```bash
+npm run lint
+```
+
+PASS iff exit 0.
+
+### Test C — Build passes
+
+```bash
+npm run build
+```
+
+PASS iff exit 0.
+
+### Test D — Auth pages render
+
+```bash
+npm run dev > /tmp/oz-dev.log 2>&1 &
+DEV_PID=$!
+sleep 8
+
+CODE_SIGNIN=$(curl -s -o /tmp/oz-signin.html -w "%{http_code}" http://localhost:3000/sign-in)
+CODE_SIGNUP=$(curl -s -o /tmp/oz-signup.html -w "%{http_code}" http://localhost:3000/sign-up)
+
+kill $DEV_PID 2>/dev/null
+```
+
+PASS iff:
+- Both codes are `200`
+- `/tmp/oz-signin.html` contains `lang="he"`, `dir="rtl"`, `המשך עם Google`, `שלחו לי קישור התחברות`, `שלחו לי קוד SMS`
+- `/tmp/oz-signup.html` contains `חברה לניהול נכסים`, `אני בעל נכס פרטי`
+- `/tmp/oz-dev.log` contains no `Error:` or `Failed to compile`
+
+### Test E — Middleware exists and matcher excludes static assets
+
+```bash
+test -f middleware.ts || { echo "FAIL: middleware.ts missing"; exit 1; }
+grep -q '_next/static' middleware.ts || { echo "FAIL: middleware matcher missing _next/static exclusion"; exit 1; }
+echo "PASS"
+```
+
+### Test F — Supabase client files exist
+
+```bash
+test -f lib/supabase/server.ts || { echo "FAIL: lib/supabase/server.ts missing"; exit 1; }
+test -f lib/supabase/browser.ts || { echo "FAIL: lib/supabase/browser.ts missing"; exit 1; }
+echo "PASS"
+```
+
+### Test G — End-to-end signup smoke (via service role)
+
+A real OAuth/OTP flow can't be automated easily, so verify the trigger end-to-end via direct Supabase client call:
+
+```bash
+# Use service role to insert an auth.users row with role meta-data,
+# then verify a profiles row was created with role = 'owner_company'.
+supabase db query "
+INSERT INTO auth.users (id, email, encrypted_password, raw_user_meta_data)
+VALUES (gen_random_uuid(), 'cp3b-smoke@example.com', '', '{\"role\":\"owner_company\",\"full_name\":\"Test Co\"}'::jsonb);
+
+SELECT role, full_name FROM public.profiles
+WHERE email = 'cp3b-smoke@example.com';
+"
+```
+
+PASS iff result row has `owner_company` and `Test Co`.
+
+### Test H — RLS denies unauthenticated SELECT
+
+```bash
+# Anon role cannot read anyone else's profile.
+supabase db query "SET ROLE anon; SELECT count(*) FROM public.profiles;"
+```
+
+PASS iff result is `0` (RLS hides every row from anon).
+
+### Test I — Cleanup
+
+```bash
+supabase db query "DELETE FROM auth.users WHERE email = 'cp3b-smoke@example.com';"
+```
+
+Should run without error.
+
+## §3.15 — Commit (after `continue`)
+
+Stage all new files. Confirm by listing them. Commit message:
+
+```
+phase 3: auth & RLS foundation
+
+CP-3a — Database
+- supabase/migrations/20260505000001_user_role_and_profiles.sql
+  (user_role enum, profiles table, persona-aware handle_new_user trigger)
+- supabase/migrations/20260505000002_profiles_rls.sql
+  (RLS skeleton: select-own, update-own-without-role-change, insert via trigger only)
+- DECISIONS_LOG: enum supersession, owner_company default, B1 lock,
+  Option C signup UX
+- BUILD_PLAN §3.B updated with new enum
+- README prerequisites: Docker, Supabase CLI
+
+CP-3b — Auth UI
+- lib/supabase/{server,browser}.ts — SSR-aware clients
+- middleware.ts — refreshes session cookies
+- app/(auth)/sign-in — three methods on a single page
+  (Google OAuth + email magic-link + Twilio SMS OTP)
+- app/(auth)/sign-up — persona picker; company creates owner_company
+  account, individual sees "coming soon"
+- app/(auth)/callback — OAuth + magic-link code exchange
+- app/(auth)/sign-out — POST handler
+
+Reaches CP-3b.
+```
+
+Print closing checkpoint banner and exit.
 
 ---
 
