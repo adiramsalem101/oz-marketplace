@@ -8,14 +8,53 @@ import { SignUpCorporation } from './SignUpCorporation';
 import { SignUpIndividualSoon } from './SignUpIndividualSoon';
 import styles from './page.module.scss';
 
-type Persona = null | 'company' | 'corporation' | 'individual';
+type Step =
+  | { kind: 'persona-picker' }
+  | { kind: 'owner-type-picker' }
+  | { kind: 'company-form' }
+  | { kind: 'corporation-form' }
+  | { kind: 'individual-soon' };
 
 export default function SignUpPage() {
-  const [persona, setPersona] = useState<Persona>(null);
+  const [step, setStep] = useState<Step>({ kind: 'persona-picker' });
 
-  if (persona === 'company') return <SignUpCompany onBack={() => setPersona(null)} />;
-  if (persona === 'corporation') return <SignUpCorporation onBack={() => setPersona(null)} />;
-  if (persona === 'individual') return <SignUpIndividualSoon onBack={() => setPersona(null)} />;
+  if (step.kind === 'company-form') {
+    return <SignUpCompany onBack={() => setStep({ kind: 'owner-type-picker' })} />;
+  }
+  if (step.kind === 'corporation-form') {
+    return <SignUpCorporation onBack={() => setStep({ kind: 'persona-picker' })} />;
+  }
+  if (step.kind === 'individual-soon') {
+    return <SignUpIndividualSoon onBack={() => setStep({ kind: 'owner-type-picker' })} />;
+  }
+
+  if (step.kind === 'owner-type-picker') {
+    return (
+      <Card variant="default" padded={false} className={styles.card}>
+        <header className={styles.header}>
+          <span aria-hidden="true" className={styles.crane}>🏗</span>
+          <h1>איזה סוג בעלים אתם?</h1>
+        </header>
+
+        <div className={styles.choices}>
+          <Button variant="ghost" fullWidth onClick={() => setStep({ kind: 'company-form' })}>
+            חברה לניהול נכסים
+          </Button>
+          <Button variant="ghost" fullWidth onClick={() => setStep({ kind: 'individual-soon' })}>
+            בעל נכס פרטי
+          </Button>
+        </div>
+
+        <button
+          type="button"
+          className={styles.backLink}
+          onClick={() => setStep({ kind: 'persona-picker' })}
+        >
+          חזרה
+        </button>
+      </Card>
+    );
+  }
 
   return (
     <Card variant="default" padded={false} className={styles.card}>
@@ -26,20 +65,13 @@ export default function SignUpPage() {
       </header>
 
       <div className={styles.choices}>
-        <Button variant="cta" fullWidth onClick={() => setPersona('company')}>
+        <Button variant="ghost" fullWidth onClick={() => setStep({ kind: 'owner-type-picker' })}>
           אני משכיר נכסים
         </Button>
-        <Button variant="cta" fullWidth onClick={() => setPersona('corporation')}>
+        <Button variant="ghost" fullWidth onClick={() => setStep({ kind: 'corporation-form' })}>
           אני מחפש דיור לעובדים
         </Button>
       </div>
-
-      <p className={styles.individualLink}>
-        בעלי נכס פרטיים?{' '}
-        <button type="button" className={styles.linkBtn} onClick={() => setPersona('individual')}>
-          בקרוב
-        </button>
-      </p>
 
       <footer className={styles.footer}>
         <span>כבר יש לכם חשבון? </span>

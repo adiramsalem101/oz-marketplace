@@ -52,18 +52,14 @@
   }
 }
 
-.individualLink {
-  margin-block-start: t.space(3);
-  text-align: center;
-  font-size: t.font-size(sm);
-  color: t.color(fg-muted);
-}
-
-.linkBtn {
+.backLink {
+  display: block;
+  margin: t.space(4) auto 0;
   background: none;
   border: 0;
-  padding: 0;
+  padding: t.space(2) t.space(3);
   font: inherit;
+  font-size: t.font-size(sm);
   font-weight: t.font-weight(semibold);
   color: t.color(blue-deep);
   cursor: pointer;

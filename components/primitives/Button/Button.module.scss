@@ -54,12 +54,11 @@
 
 .variant-ghost {
   background: t.color(white);
-  color: t.color(fg-default);
-  border-color: t.color(border-default);
+  color: t.color(blue-deep);
+  border-color: t.color(blue-deep);
 
   &:hover:not(:disabled) {
-    border-color: t.color(blue-deep);
-    color: t.color(blue-deep);
+    background: t.color(blue-deep-soft);
   }
 }
 
