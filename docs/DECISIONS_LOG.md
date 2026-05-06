@@ -235,6 +235,10 @@ The legacy docs reference 5 files that don't exist on disk (`BOOKING_SYSTEM_MVP.
 - **2026-05-04 — Phase 1 deviation:** Chip is a Client Component (`'use client'` at the top of `Chip.tsx`). Required because Chip binds `onClick` for the optional `onRemove` handler, and Next 16 RSC cannot serialize functions from Server to Client Components. The pattern — "primitives that take event-handler props are Client Components" — applies to most interactive primitives going forward.
 - **2026-05-04 — Phase 1 deviation:** The CP-1.5 demo page at `app/(dev)/primitives/page.tsx` remains a Server Component (preserves the `metadata` export). The interactive `RemovableChipDemo` is extracted to `app/(dev)/primitives/InteractiveChips.tsx` as a `'use client'` island. This is the recommended pattern for any future dev/demo pages that need both metadata and interactivity.
 
+### 2026-05-06 — Phase 3 deviations
+
+- **2026-05-06 — Phase 3 deviation:** PROMPT_LIBRARY §3.11 specifies `middleware.ts` at the repo root, with an exported `middleware()` function and a Test E that greps for that filename. Next.js 16.0.0 deprecated the `middleware` file convention and renamed it to `proxy` (see `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md` § "Migration to Proxy"). The build emits `⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.` Per the AGENTS.md instruction to heed Next 16 deprecation notices, the file is named `proxy.ts` and exports `export async function proxy(request)`. The matcher config and Supabase session-refresh body are unchanged. CP-3b Test E was treated as satisfied by `proxy.ts` (same role, renamed convention); the spec text in PROMPT_LIBRARY is left as-is and should be amended in a later phase.
+
 ### 2026-05-04 — Phase 2 deviations
 
 - **2026-05-04 — Phase 2 deviation:** Six icon names from PROMPT_LIBRARY §Phase 2 had no matching symbol in `public/icons.svg` and were substituted with the closest matches that do exist:
@@ -249,6 +253,161 @@ The legacy docs reference 5 files that don't exist on disk (`BOOKING_SYSTEM_MVP.
 - **2026-05-04 — Phase 2 deviation:** Phase 2 layout components do not pass `aria-hidden` to `<Icon>` elements where decorative. `IconProps` from Phase 1 doesn't extend `HTMLAttributes`, so passing `aria-hidden` would fail `tsc`. The `Icon` primitive auto-applies `aria-hidden` when no `aria-label` is given, so the accessibility behavior is identical. Pattern for future phases: pass `aria-label="..."` for meaningful icons; omit `aria-hidden` for decorative icons (auto-applied by `Icon`).
 
 - **2026-05-04 — Phase 2 deviation:** Reset uses targeted longhand rules, not universal * { margin: 0 }. Universal physical-margin shorthand interacts unpredictably with logical-property longhands like margin-block-end. The targeted-element reset preserves typography control without specificity conflicts.
+
+---
+
+## 2026-05-05 — Phase 3 decisions (initial)
+
+### Auth & roles
+
+- **User role enum SUPERSEDES BUILD_PLAN §3.B original lock.**
+  Original (CP-1, 2026-05-02): `('b2c_owner', 'corporate_member', 'b2b_owner', 'admin')`.
+  New (2026-05-05): `('owner_individual', 'owner_company', 'construction_corporation', 'admin')`.
+  Rationale: the B2C/B2B labels were inherited from manager vocabulary but
+  misrepresent the product. There is no consumer in oz-marketplace; all three
+  non-admin roles are businesses transacting with each other. The new names
+  describe the actual entities: an individual property owner, a property-
+  management company with many listings, and a construction corporation
+  on the demand side.
+
+- **Default role at signup (initial): `owner_company`.**
+  MVP day-one launches the supply-side product for property-management
+  companies. *(Note: superseded 2026-05-06 — `construction_corporation` is also signupable.)*
+
+- **`owner_individual` enum value reserved but unreachable in MVP.**
+  Defined in the schema, no signup path leads to it. Activated in a later
+  phase when individual-owner self-serve is on the roadmap.
+
+- **`admin` is OZ staff.** No self-serve signup. Created via Studio.
+
+- **B1 default-to-single-role pattern locked for MVP.**
+  Self-serve signup writes a fixed role; admins promote to other roles
+  via Studio. Future-roadmap entry: build B2/B3 self-serve persona-picker
+  for `owner_individual` once the individual product launches.
+
+### Auth methods
+
+- **Three sign-in methods on a single `/sign-in` page:**
+  Google OAuth, Twilio SMS OTP, email magic-link. All three handled by
+  Supabase Auth natively. Email/password is intentionally not shipping —
+  magic-link covers the same use case without password storage, reset
+  flows, or "forgot password" UI.
+
+### Infrastructure
+
+- **Local Supabase via `supabase start` for development.**
+  Docker Desktop and Supabase CLI are required local prerequisites
+  (added to README). Phase 5 (production readiness) provisions the
+  remote Supabase project. No fork-and-clean from the legacy project;
+  the schema is authored fresh.
+
+- **`TWILIO_SMS_FROM` is the canonical env var name** for the OTP source
+  number. Aligns with the legacy `.env.local`. The Phase 0 `.env.example`
+  template used `TWILIO_OTP_FROM_NUMBER`; this is corrected in Phase 3.
+
+---
+
+## 2026-05-06 — MVP scope re-lock + Phase 3 amendments
+
+### MVP scope re-lock
+
+Original BUILD_PLAN had eight phases including a corporate dashboard
+(Phase 4), a B2C marketplace (Phase 5), a native hostel booking engine
+(Phase 6), and integrations (Phase 7). Following business-side direction,
+**MVP is re-scoped to two production-ready surfaces:**
+
+1. **B2B marketplace.** Owner-companies list properties; construction
+   corporations browse, request to book, pay full stay upfront + OZ
+   commission via Pelecard; sign a digital lease via HelloSign.
+2. **Hostels page.** Public route with link-out cards to FrontDeskMaster's
+   hosted booking for the four AM HOSTELS properties.
+
+**Deferred (not in MVP):** corporate dashboard, B2C / individual-owner
+product, native hostel booking engine, yield calculator, AI Import,
+virtual tours, ratings, Tier-3 verification, Neema integration, premium
+listing tiers.
+
+**"Production-ready" means production-ready** — no half-built features
+visible to users in production. Code that's not part of MVP simply
+doesn't exist in the codebase yet. See feature-flag pattern below.
+
+### Phase 3 amendment — `construction_corporation` is signupable
+
+The 2026-05-05 decision said `construction_corporation` would be
+admin-invited only. **Updated 2026-05-06:** `construction_corporation`
+is signupable via the public sign-up form, because the marketplace flow
+requires self-serve corporate signup (a corporation that finds OZ
+through SEO needs to be able to sign up and request a booking without
+waiting for high-touch onboarding).
+
+The sign-up persona picker now offers three options:
+
+1. **"חברה לניהול נכסים"** → creates `owner_company`
+2. **"תאגיד בנייה"** → creates `construction_corporation`
+3. **"פרטיים"** → friendly "coming soon" message; no account created
+
+The `handle_new_user()` trigger accepts both `owner_company` and
+`construction_corporation` from `raw_user_meta_data.role`. Anything
+else (including absent / null / `owner_individual` / `admin`) coerces
+to `owner_company`.
+
+### Feature flag pattern (locked)
+
+A `feature_flags` table is created in Phase 4. Pattern is:
+
+- **Navigation entries** use runtime config flags so the IA can be
+  built holistically (full sidebar) but unbuilt screens stay hidden.
+  Default off in production.
+- **Screens behind unbuilt features** simply don't exist as routes.
+  No `(corporate)/dashboard/page.tsx` returning "coming soon."
+
+This means in MVP production: nav is sparse (only routes that exist),
+and every visible nav entry leads to a real, complete screen.
+
+### Hostels: link-out for MVP, conversion roadmap
+
+The MVP hostels page is **link-out cards** to FrontDeskMaster's hosted
+booking. The four FDM URLs (Jerusalem, Tel Aviv, Haifa, Tiberias) are
+captured in `lib/hostels.ts` as the source of truth.
+
+**Future-roadmap (post-MVP):**
+1. Convert link-out cards to embedded FDM component (requires FDM to
+   expose an embed mechanism — TBD with Mateusz).
+2. Replace embedded FDM with own native booking engine, OR skip the
+   embed step entirely and go directly to native if engineering capacity
+   allows.
+
+Logged in `TASKS.md` Future-roadmap.
+
+### Payments + commission flow (locked)
+
+- **Pelecard Link b'Click for MVP**, full embedded API later. Generates
+  a payment URL, customer pays on Pelecard's hosted page, webhook fires
+  on success. Mirrors the Pakal Nofesh pattern Alon already built.
+- **Money flow A:** OZ takes everything via Pelecard, withholds
+  commission, settles the rest to the owner-company on a manual
+  operations cycle. (Pelecard split-payment to owner is `feature_flags`
+  flagged off and is a future iteration.)
+- **Total amount = (monthly_rent × months) + OZ commission** (5% of
+  rent total). Snapshot stored on the booking row at request time.
+
+### Contract: HelloSign with standardized lease
+
+- HelloSign signature requests sent to both parties when a booking
+  reaches `paid` state.
+- Standardized 12-month residential lease template (Hozeh Shakir Bait
+  Dirah) with OZ-specific clauses for foreign-worker housing.
+- Template stored in `templates/lease.docx` (or HelloSign template ID
+  per env var). Pre-filled with property + booking data.
+- Webhook updates `bookings.status = 'confirmed'` when both parties
+  sign.
+
+### Default homepage (`/`) is the marketplace landing
+
+Per the existing workerhome.co.il pattern: hero + hostels strip +
+listings preview + how-it-works + FAQ + footer. Public, no auth gate
+on browse. Dropped from the existing site for MVP scope: B2C section,
+yield calculator, testimonials, Tier-3 verification badges.
 
 ---
 

@@ -1,0 +1,75 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/density" as d;
+
+.methods {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(4);
+
+  // Auth surfaces use semibold control text, not the primitive's bold.
+  button {
+    font-weight: t.font-weight(semibold);
+    min-height: d.$density-button-height-default;
+  }
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+
+  input {
+    padding: 10px 12px;
+    min-height: d.$density-input-height-default;
+  }
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: t.space(3);
+  color: t.color(fg-faint);
+  font-size: t.font-size(sm);
+
+  &::before,
+  &::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: t.color(border-default);
+  }
+}
+
+.error {
+  color: t.color(red-600);
+  font-size: t.font-size(sm);
+  text-align: center;
+}
+
+.sent {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+  text-align: center;
+
+  h2 {
+    font-size: t.font-size(lg);
+  }
+
+  p {
+    font-size: t.font-size(sm);
+    color: t.color(fg-muted);
+  }
+}
+
+.footer {
+  text-align: center;
+  margin-block-start: t.space(5);
+  font-size: t.font-size(sm);
+  color: t.color(fg-muted);
+
+  a {
+    color: t.color(blue-deep);
+    font-weight: t.font-weight(semibold);
+  }
+}

@@ -21,6 +21,18 @@ A Hebrew-first marketplace for placing foreign workers into housing in Israel. B
 | **staging** | per-PR Vercel Preview (no fixed URL) | `staging` | auto on push |
 | **production** | (TBD — added when first prod deploy lands) | `main` | manual, requires explicit approval (IRON_RULE 4) |
 
+## Prerequisites
+
+oz-marketplace's local dev stack requires:
+
+- **Node.js 18.18 or higher** — `node -v`
+- **npm** — bundled with Node
+- **Docker Desktop** running — required by Supabase's local stack. Verify with `docker info`.
+- **Supabase CLI** — install via `brew install supabase/tap/supabase` on macOS, or per the [Supabase CLI install docs](https://supabase.com/docs/guides/cli/getting-started). Verify with `supabase --version`.
+- **`.env.local`** — copy `.env.example` and fill in values. See `docs/INTEGRATIONS.md` for what each variable is for.
+
+Without Docker running, `supabase start` will fail and auth flows won't work.
+
 ## Run locally
 
 1. Copy the env template and fill in real values:
