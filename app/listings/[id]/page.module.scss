@@ -1,0 +1,139 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.main {
+  max-width: 1200px;
+  margin-inline: auto;
+  padding: t.space(7) t.space(5) t.space(11);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(9) t.space(7) t.space(11);
+  }
+}
+
+.header {
+  margin-block-end: t.space(7);
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+
+  h1 {
+    font-size: t.font-size(3xl);
+    margin: 0;
+
+    @include m.from(t.bp(md)) {
+      font-size: t.font-size(4xl);
+    }
+  }
+
+  p {
+    color: t.color(fg-muted);
+    margin: 0;
+  }
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: t.space(3);
+  margin-block-end: t.space(7);
+
+  @include m.from(t.bp(md)) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.image {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: t.radius(2xl);
+  background: t.color(gray-100);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: t.space(5);
+
+  @include m.from(t.bp(lg)) {
+    grid-template-columns: 2fr 1fr;
+    align-items: start;
+  }
+}
+
+.detail {
+  padding: t.space(6);
+
+  h2 {
+    font-size: t.font-size(xl);
+    margin-block: 0 t.space(4);
+  }
+}
+
+.facts {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 t.space(5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: t.space(2);
+
+  li {
+    padding: t.space(1) t.space(3);
+    background: t.color(gray-50);
+    border-radius: t.radius(full);
+    font-size: t.font-size(sm);
+    color: t.color(fg-default);
+  }
+}
+
+.price {
+  font-size: t.font-size(2xl);
+  font-weight: t.font-weight(bold);
+  color: t.color(blue-deep);
+  margin: 0 0 t.space(5);
+
+  span {
+    font-size: t.font-size(sm);
+    color: t.color(fg-muted);
+    font-weight: t.font-weight(normal);
+  }
+}
+
+.description {
+  color: t.color(fg-default);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.bookingPanel {
+  padding: t.space(6);
+  position: sticky;
+  inset-block-start: t.space(5);
+}
+
+.bookingPrompt {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+
+  h3 {
+    margin: 0;
+    font-size: t.font-size(lg);
+  }
+
+  p {
+    margin: 0;
+    color: t.color(fg-muted);
+    font-size: t.font-size(sm);
+  }
+}
+
+.signInLink {
+  align-self: flex-start;
+  color: t.color(blue-deep);
+  font-weight: t.font-weight(semibold);
+  text-decoration: underline;
+}

@@ -1,0 +1,98 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.main {
+  max-width: 1100px;
+  margin-inline: auto;
+  padding: t.space(7) t.space(5) t.space(11);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(9) t.space(7) t.space(11);
+  }
+}
+
+.header {
+  margin-block-end: t.space(7);
+
+  h1 {
+    font-size: t.font-size(3xl);
+    margin-block-end: t.space(2);
+  }
+
+  p {
+    color: t.color(fg-muted);
+  }
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: t.space(3);
+  padding: t.space(9);
+
+  .link {
+    color: t.color(blue-deep);
+    font-weight: t.font-weight(semibold);
+  }
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+  padding: t.space(5);
+
+  @include m.from(t.bp(md)) {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+}
+
+.rowMain {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(1);
+}
+
+.title {
+  font-size: t.font-size(lg);
+  font-weight: t.font-weight(semibold);
+  color: t.color(blue-deep);
+  text-decoration: none;
+}
+
+.meta {
+  color: t.color(fg-muted);
+  font-size: t.font-size(sm);
+  margin: 0;
+}
+
+.rowSide {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: t.space(2);
+
+  @include m.from(t.bp(md)) {
+    align-items: flex-end;
+  }
+}
+
+.amount {
+  font-weight: t.font-weight(bold);
+  color: t.color(fg-default);
+}
+
+.link {
+  color: t.color(blue-deep);
+  text-decoration: underline;
+}

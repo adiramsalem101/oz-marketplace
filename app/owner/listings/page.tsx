@@ -23,7 +23,7 @@ export default async function MyListingsPage() {
         title="הנכסים שלי"
         subtitle={listings?.length ? `${listings.length} נכסים` : 'אין עדיין נכסים'}
         actions={
-          <Link href="/listings/new">
+          <Link href="/owner/listings/new">
             <Button variant="cta" iconStart={<Icon name="plus" size="sm" />}>
               הוסף נכס
             </Button>
@@ -35,7 +35,7 @@ export default async function MyListingsPage() {
           <Card variant="outline" className={styles.empty}>
             <h2>עדיין לא פרסמתם נכסים</h2>
             <p>הוסיפו את הנכס הראשון שלכם והתחילו לקבל פניות מתאגידי בנייה.</p>
-            <Link href="/listings/new">
+            <Link href="/owner/listings/new">
               <Button variant="cta">פרסמו את הנכס הראשון</Button>
             </Link>
           </Card>
@@ -63,7 +63,7 @@ export default async function MyListingsPage() {
                     <td><StatusPill status={l.status} /></td>
                     <td><VerificationPill level={l.verification_level} /></td>
                     <td>
-                      <Link href={`/listings/${l.id}`}>
+                      <Link href={`/owner/listings/${l.id}`}>
                         <Button variant="ghost" size="sm">ערוך</Button>
                       </Link>
                     </td>

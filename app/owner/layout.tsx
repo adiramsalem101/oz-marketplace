@@ -7,7 +7,7 @@ import { buildOwnerNav } from './nav';
 export default async function OwnerLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) redirect('/sign-in?next=/listings');
+  if (!user) redirect('/sign-in?next=/owner/listings');
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -28,7 +28,7 @@ export default async function OwnerLayout({ children }: { children: React.ReactN
         navItems,
         tenantName: profile.full_name ?? 'החברה שלי',
         user: { name: profile.full_name ?? '', role: 'בעל נכסים' },
-        activePath: '/listings',
+        activePath: '/owner/listings',
       }}
     >
       {children}

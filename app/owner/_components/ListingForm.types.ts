@@ -13,7 +13,14 @@ export interface ListingFormValues {
   has_parking: boolean;
 }
 
+export interface ListingImage {
+  id: string;
+  storage_path: string;
+  display_order: number;
+}
+
 export interface ListingFormProps {
   initial?: ListingFormValues;
   listingId?: string;
+  initialImages?: ListingImage[];
 }

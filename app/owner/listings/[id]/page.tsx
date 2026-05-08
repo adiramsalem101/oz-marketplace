@@ -12,6 +12,12 @@ export default async function EditListingPage({ params }: { params: Promise<{ id
   const { data } = await supabase.from('listings').select('*').eq('id', id).single();
   if (!data) notFound();
 
+  const { data: images } = await supabase
+    .from('listing_images')
+    .select('id, storage_path, display_order')
+    .eq('listing_id', id)
+    .order('display_order', { ascending: true });
+
   return (
     <>
       <Topbar title="עריכת נכס" subtitle={data.title} />
@@ -32,6 +38,7 @@ export default async function EditListingPage({ params }: { params: Promise<{ id
             has_wifi: data.has_wifi,
             has_parking: data.has_parking,
           }}
+          initialImages={images ?? []}
         />
       </div>
     </>

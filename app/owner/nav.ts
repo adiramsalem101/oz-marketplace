@@ -3,7 +3,7 @@ import type { FeatureFlags } from '@/lib/feature-flags';
 
 export function buildOwnerNav(flags: FeatureFlags): NavItem[] {
   const items: NavItem[] = [
-    { href: '/listings', icon: 'building', label: 'הנכסים שלי' },
+    { href: '/owner/listings', icon: 'building', label: 'הנכסים שלי' },
     { href: '/bookings/owner', icon: 'file', label: 'בקשות הזמנה' },
   ];
 

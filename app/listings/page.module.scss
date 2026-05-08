@@ -1,0 +1,129 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.main {
+  max-width: 1200px;
+  margin-inline: auto;
+  padding: t.space(7) t.space(5) t.space(11);
+
+  @include m.from(t.bp(md)) {
+    padding: t.space(9) t.space(7) t.space(11);
+  }
+}
+
+.header {
+  text-align: center;
+  margin-block-end: t.space(7);
+
+  h1 {
+    font-size: t.font-size(3xl);
+    margin-block-end: t.space(2);
+  }
+
+  p {
+    color: t.color(fg-muted);
+  }
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: t.space(3);
+  margin-block-end: t.space(7);
+
+  @include m.from(t.bp(md)) {
+    grid-template-columns: 2fr 1fr 1fr auto;
+  }
+
+  input {
+    padding: t.space(3);
+    font-size: t.font-size(base);
+    border: 1px solid t.color(border-default);
+    border-radius: t.radius(lg);
+    font-family: inherit;
+  }
+
+  button {
+    grid-column: 1 / -1;
+    padding: t.space(3) t.space(5);
+    background: t.color(orange);
+    color: t.color(fg-on-cta);
+    border: 0;
+    border-radius: t.radius(xl);
+    font-weight: t.font-weight(bold);
+    cursor: pointer;
+    box-shadow: t.shadow(orange);
+
+    @include m.from(t.bp(md)) {
+      grid-column: auto;
+    }
+  }
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: t.space(4);
+
+  @include m.from(t.bp(md)) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @include m.from(t.bp(lg)) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.cardLink {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  transition: t.motion(fast);
+
+  &:hover {
+    transform: translateY(-2px);
+  }
+}
+
+.cardBody {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+  padding: t.space(5);
+
+  h3 {
+    font-size: t.font-size(lg);
+    margin: 0;
+  }
+
+  p {
+    color: t.color(fg-muted);
+    font-size: t.font-size(sm);
+    margin: 0;
+  }
+}
+
+.cardMeta {
+  display: flex;
+  gap: t.space(3);
+  color: t.color(fg-muted);
+  font-size: t.font-size(sm);
+}
+
+.price {
+  color: t.color(blue-deep) !important;
+  font-size: t.font-size(xl) !important;
+  font-weight: t.font-weight(bold);
+
+  span {
+    font-size: t.font-size(sm);
+    color: t.color(fg-muted);
+    font-weight: t.font-weight(normal);
+  }
+}
+
+.empty {
+  text-align: center;
+  color: t.color(fg-muted);
+  padding: t.space(9) 0;
+}
