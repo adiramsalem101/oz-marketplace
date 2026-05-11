@@ -1,0 +1,79 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: t.space(2);
+  padding: t.space(6);
+  border-radius: t.radius(2xl);
+  text-decoration: none;
+  color: t.color(white);
+  transition: transform t.motion(base), box-shadow t.motion(base);
+  min-height: 180px;
+
+  &:hover {
+    transform: scale(1.02);
+    box-shadow: t.shadow(lg);
+  }
+}
+
+.size-spacious {
+  padding: t.space(7);
+  min-height: 220px;
+  gap: t.space(3);
+}
+
+.size-panel {
+  padding: t.space(5);
+  min-height: 140px;
+  gap: t.space(1);
+}
+
+.size-panel .emoji {
+  font-size: 26px;
+}
+
+.size-panel .name {
+  font-size: t.font-size(base);
+}
+
+.size-panel .cta {
+  padding-block-start: t.space(2);
+  font-size: t.font-size(xs);
+}
+
+.tone-blue-light  { background: t.color(blue-light); }
+.tone-orange      { background: t.color(orange); }
+.tone-green-deep  { background: t.color(green-deep); }
+.tone-green-light { background: t.color(green-light); }
+
+.emoji {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.city {
+  font-size: t.font-size(sm);
+  opacity: 0.85;
+  font-weight: t.font-weight(medium);
+}
+
+.name {
+  font-size: t.font-size(xl);
+  font-weight: t.font-weight(bold);
+  line-height: t.leading(tight);
+}
+
+.size-spacious .name {
+  font-size: t.font-size(2xl);
+}
+
+.cta {
+  margin-block-start: auto;
+  padding-block-start: t.space(3);
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(semibold);
+  color: t.color(white);
+}

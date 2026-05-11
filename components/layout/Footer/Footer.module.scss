@@ -1,0 +1,104 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.footer {
+  background: t.color(blue-deep);
+  color: rgb(255 255 255 / 0.7);
+  padding-block: t.space(7);
+
+  @include m.from(t.bp(md)) {
+    padding-block: t.space(9);
+  }
+}
+
+.inner {
+  @include m.container;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: t.space(7);
+
+  @include m.from(t.bp(sm)) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @include m.from(t.bp(lg)) {
+    grid-template-columns: 1.5fr 1fr 1fr 1fr;
+    gap: t.space(8);
+  }
+}
+
+.brandCol {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+}
+
+.brandLink {
+  display: inline-flex;
+  text-decoration: none;
+  color: inherit;
+}
+
+.tagline {
+  margin: 0;
+  color: rgb(255 255 255 / 0.7);
+  font-size: t.font-size(sm);
+  line-height: t.leading(relaxed);
+  max-width: 28ch;
+}
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: t.space(3);
+}
+
+.colTitle {
+  margin: 0 0 t.space(2);
+  font-size: t.font-size(sm);
+  font-weight: t.font-weight(bold);
+  letter-spacing: t.tracking(wider);
+  color: t.color(white);
+  text-transform: uppercase;
+}
+
+.linkList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+}
+
+.link {
+  color: rgb(255 255 255 / 0.7);
+  text-decoration: none;
+  font-size: t.font-size(sm);
+  transition: color t.motion(fast);
+
+  &:hover {
+    color: t.color(white);
+  }
+}
+
+.contactNote {
+  color: rgb(255 255 255 / 0.5);
+  font-size: t.font-size(sm);
+}
+
+.bottom {
+  margin-block-start: t.space(7);
+  padding-block-start: t.space(5);
+  border-block-start: 1px solid rgb(255 255 255 / 0.1);
+  text-align: center;
+}
+
+.copy {
+  margin: 0;
+  font-size: t.font-size(sm);
+  color: rgb(255 255 255 / 0.5);
+}

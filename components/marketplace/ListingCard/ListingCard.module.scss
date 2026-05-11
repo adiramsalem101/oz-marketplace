@@ -1,0 +1,124 @@
+@use "@/styles/tokens" as t;
+@use "@/styles/mixins" as m;
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: t.color(white);
+  border: 1px solid t.color(gray-200);
+  border-radius: t.radius(2xl);
+  overflow: hidden;
+  text-decoration: none;
+  color: inherit;
+  transition: transform t.motion(base), box-shadow t.motion(base), border-color t.motion(base);
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: t.shadow(md);
+    border-color: t.color(gray-300);
+  }
+
+  &:focus-visible {
+    @include m.focus-ring();
+  }
+}
+
+.imageWrap {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  background: t.color(bg-soft);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.imageFallback {
+  font-size: 56px;
+  opacity: 0.3;
+}
+
+.vacancyPill {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline-start: 12px;
+  background: rgb(255 255 255 / 0.95);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  color: t.color(ink);
+  font-size: t.font-size(xs);
+  font-weight: t.font-weight(bold);
+  padding: t.space(1) t.space(3);
+  border-radius: t.radius(full);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.15);
+  white-space: nowrap;
+}
+
+.body {
+  padding: t.space(5);
+  display: flex;
+  flex-direction: column;
+  gap: t.space(2);
+}
+
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: t.space(3);
+}
+
+.title {
+  margin: 0;
+  font-size: t.font-size(lg);
+  font-weight: t.font-weight(semibold);
+  color: t.color(ink);
+  line-height: t.leading(tight);
+}
+
+.location {
+  margin: 0;
+  font-size: t.font-size(sm);
+  color: t.color(gray-500);
+  display: inline-flex;
+  align-items: center;
+  gap: t.space(1);
+}
+
+.footer {
+  margin-block-start: t.space(2);
+  padding-block-start: t.space(3);
+  border-block-start: 1px solid t.color(gray-200);
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: t.space(2);
+}
+
+.price {
+  margin: 0;
+  font-size: t.font-size(xl);
+  font-weight: t.font-weight(bold);
+  color: t.color(blue-deep);
+  line-height: 1;
+}
+
+.priceSuffix {
+  font-size: t.font-size(xs);
+  font-weight: t.font-weight(normal);
+  color: t.color(gray-500);
+  margin-inline-start: t.space(1);
+}
+
+.beds {
+  margin: 0;
+  font-size: t.font-size(xs);
+  color: t.color(gray-600);
+}
