@@ -2,7 +2,6 @@ import Link from 'next/link';
 import { createServerClient } from '@/lib/supabase/server';
 import { BrandMark } from '@/components/layout/BrandMark/BrandMark';
 import { Button } from '@/components/primitives/Button/Button';
-import { UserWidget } from '@/components/layout/UserWidget/UserWidget';
 import { PublicNavMobileMenu } from './PublicNavMobileMenu';
 import styles from './PublicNav.module.scss';
 
@@ -10,6 +9,14 @@ const NAV_LINKS = [
   { href: '/listings', label: 'נכסים זמינים' },
   { href: '/hostels',  label: 'אכסניות' },
 ];
+
+function firstName(displayName: string | null): string {
+  if (!displayName) return '';
+  const trimmed = displayName.trim();
+  if (!trimmed) return '';
+  if (trimmed.includes('@')) return trimmed.split('@')[0];
+  return trimmed.split(/\s+/)[0];
+}
 
 export async function PublicNav() {
   const supabase = await createServerClient();
@@ -44,15 +51,9 @@ export async function PublicNav() {
 
   const actions = user ? (
     <div className={styles.signedIn}>
-      <Link href={panelHref} className={styles.panelLink}>הפאנל שלי</Link>
-      <UserWidget
-        name={displayName ?? ''}
-        role={
-          role === 'owner_company' ? 'בעל נכסים'
-          : role === 'construction_corporation' ? 'תאגיד בנייה'
-          : ''
-        }
-      />
+      <Link href={panelHref} className={styles.greeting}>
+        שלום, <strong>{firstName(displayName)}</strong>
+      </Link>
       <form action="/sign-out" method="post" className={styles.signOutForm}>
         <button type="submit" className={styles.signOutBtn}>התנתקות</button>
       </form>
@@ -68,7 +69,7 @@ export async function PublicNav() {
     <header className={styles.header}>
       <div className={styles.inner}>
         <Link href="/" aria-label="עוז · דף הבית" className={styles.brandLink}>
-          <BrandMark size="base" />
+          <BrandMark size="base" tone="dark" showMark />
         </Link>
 
         <nav className={styles.desktopNav} aria-label="ראשי">

@@ -2,26 +2,31 @@
 @use "@/styles/mixins" as m;
 
 .main {
-  max-width: 1200px;
-  margin-inline: auto;
-  padding: t.space(7) t.space(5) t.space(11);
+  @include m.container;
+  padding-block: t.space(8) t.space(11);
 
   @include m.from(t.bp(md)) {
-    padding: t.space(9) t.space(7) t.space(11);
+    padding-block: t.space(11);
   }
 }
 
 .header {
-  text-align: center;
+  text-align: start;
   margin-block-end: t.space(7);
 
   h1 {
     font-size: t.font-size(3xl);
+    font-weight: t.font-weight(extrabold);
+    color: t.color(ink);
     margin-block-end: t.space(2);
+
+    @include m.from(t.bp(md)) {
+      font-size: t.font-size(4xl);
+    }
   }
 
   p {
-    color: t.color(fg-muted);
+    color: t.color(gray-500);
   }
 }
 
@@ -38,9 +43,18 @@
   input {
     padding: t.space(3);
     font-size: t.font-size(base);
-    border: 1px solid t.color(border-default);
+    border: 1px solid t.color(gray-200);
     border-radius: t.radius(lg);
     font-family: inherit;
+    color: t.color(ink);
+    background: t.color(white);
+    transition: border-color t.motion(fast);
+
+    &:focus {
+      outline: none;
+      border-color: t.color(blue-deep);
+      box-shadow: 0 0 0 3px t.color(blue-deep-soft);
+    }
   }
 
   button {
@@ -53,6 +67,11 @@
     font-weight: t.font-weight(bold);
     cursor: pointer;
     box-shadow: t.shadow(orange);
+    transition: t.motion(fast);
+
+    &:hover {
+      background: t.color(orange-hover);
+    }
 
     @include m.from(t.bp(md)) {
       grid-column: auto;
@@ -63,7 +82,7 @@
 .grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: t.space(4);
+  gap: t.space(5);
 
   @include m.from(t.bp(md)) {
     grid-template-columns: repeat(2, 1fr);
@@ -71,54 +90,6 @@
 
   @include m.from(t.bp(lg)) {
     grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.cardLink {
-  display: block;
-  text-decoration: none;
-  color: inherit;
-  transition: t.motion(fast);
-
-  &:hover {
-    transform: translateY(-2px);
-  }
-}
-
-.cardBody {
-  display: flex;
-  flex-direction: column;
-  gap: t.space(2);
-  padding: t.space(5);
-
-  h3 {
-    font-size: t.font-size(lg);
-    margin: 0;
-  }
-
-  p {
-    color: t.color(fg-muted);
-    font-size: t.font-size(sm);
-    margin: 0;
-  }
-}
-
-.cardMeta {
-  display: flex;
-  gap: t.space(3);
-  color: t.color(fg-muted);
-  font-size: t.font-size(sm);
-}
-
-.price {
-  color: t.color(blue-deep) !important;
-  font-size: t.font-size(xl) !important;
-  font-weight: t.font-weight(bold);
-
-  span {
-    font-size: t.font-size(sm);
-    color: t.color(fg-muted);
-    font-weight: t.font-weight(normal);
   }
 }
 

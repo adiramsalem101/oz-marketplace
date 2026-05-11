@@ -2,12 +2,11 @@
 @use "@/styles/mixins" as m;
 
 .main {
-  max-width: 1200px;
-  margin-inline: auto;
-  padding: t.space(7) t.space(5) t.space(11);
+  @include m.container;
+  padding-block: t.space(7) t.space(11);
 
   @include m.from(t.bp(md)) {
-    padding: t.space(9) t.space(7) t.space(11);
+    padding-block: t.space(9) t.space(11);
   }
 }
 

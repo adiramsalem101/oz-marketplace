@@ -6,11 +6,18 @@
   gap: t.space(2);
 }
 
+.mark {
+  font-size: 1.05em;
+  line-height: 1;
+}
+
 .name {
   font-weight: t.font-weight(extrabold);
   letter-spacing: t.tracking(tight);
-  color: t.color(white);
 }
+
+.tone-light .name { color: t.color(white); }
+.tone-dark  .name { color: t.color(blue-deep); }
 
 .size-sm   .name { font-size: t.font-size(base); }
 .size-base .name { font-size: t.font-size(2xl); }

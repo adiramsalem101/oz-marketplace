@@ -4,6 +4,8 @@ import { createServerClient } from '@/lib/supabase/server';
 import { Card } from '@/components/primitives/Card/Card';
 import { Pill } from '@/components/primitives/Pill/Pill';
 import { PublicNav } from '@/components/layout/PublicNav/PublicNav';
+import { PilotBanner } from '@/components/layout/PilotBanner/PilotBanner';
+import { Footer } from '@/components/layout/Footer/Footer';
 import { BookingRequestForm } from './BookingRequestForm';
 import styles from './page.module.scss';
 
@@ -41,8 +43,10 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
   );
 
   return (
-    <main className={styles.main}>
+    <>
       <PublicNav />
+      <PilotBanner />
+      <main className={styles.main}>
       <header className={styles.header}>
         <h1>{listing.title}</h1>
         <p>📍 {listing.city}{listing.street ? `, ${listing.street} ${listing.street_number ?? ''}` : ''}</p>
@@ -92,7 +96,9 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
           )}
         </Card>
       </div>
-    </main>
+      </main>
+      <Footer />
+    </>
   );
 }
 

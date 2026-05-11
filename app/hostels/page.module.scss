@@ -2,21 +2,22 @@
 @use "@/styles/mixins" as m;
 
 .main {
-  max-width: 1100px;
-  margin-inline: auto;
-  padding: t.space(7) t.space(5) t.space(11);
+  @include m.container;
+  padding-block: t.space(8) t.space(11);
 
   @include m.from(t.bp(md)) {
-    padding: t.space(9) t.space(7) t.space(11);
+    padding-block: t.space(11);
   }
 }
 
 .header {
-  text-align: center;
+  text-align: start;
   margin-block-end: t.space(8);
 
   h1 {
     font-size: t.font-size(3xl);
+    font-weight: t.font-weight(extrabold);
+    color: t.color(ink);
     margin-block-end: t.space(3);
 
     @include m.from(t.bp(md)) {
@@ -25,63 +26,22 @@
   }
 
   p {
-    color: t.color(fg-muted);
+    color: t.color(gray-600);
     font-size: t.font-size(lg);
+    max-width: 640px;
   }
 }
 
 .grid {
   display: grid;
   grid-template-columns: 1fr;
-  gap: t.space(4);
+  gap: t.space(5);
 
   @include m.from(t.bp(md)) {
     grid-template-columns: repeat(2, 1fr);
   }
 
   @include m.from(t.bp(lg)) {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
-}
-
-.card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: t.space(3);
-  padding: t.space(7) t.space(5);
-  background: t.color(white);
-  border: 1px solid t.color(border-default);
-  border-radius: t.radius(2xl);
-  text-decoration: none;
-  color: inherit;
-  text-align: center;
-  transition: t.motion(fast);
-
-  &:hover {
-    border-color: t.color(blue-deep);
-    box-shadow: t.shadow(md);
-  }
-
-  h2 {
-    font-size: t.font-size(lg);
-    margin: 0;
-  }
-}
-
-.emoji {
-  font-size: 56px;
-  line-height: 1;
-}
-
-.city {
-  color: t.color(fg-muted);
-  font-size: t.font-size(sm);
-  margin: 0;
-}
-
-.cta {
-  margin-block-start: t.space(3);
-  color: t.color(orange);
-  font-weight: t.font-weight(semibold);
 }

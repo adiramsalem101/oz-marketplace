@@ -7,18 +7,17 @@
   z-index: t.z(sticky);
   width: 100%;
   background: t.color(white);
-  border-block-end: 1px solid t.color(border-strong);
+  border-block-end: 1px solid t.color(gray-200);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
 }
 
 .inner {
+  @include m.container;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: t.space(6);
   height: 56px;
-  max-width: 1280px;
-  margin-inline: auto;
-  padding-inline: t.space(5);
 
   @include m.from(t.bp(md)) {
     height: 64px;
@@ -49,7 +48,7 @@
   margin: 0;
   display: flex;
   align-items: center;
-  gap: t.space(5);
+  gap: t.space(6);
 }
 
 .navLink {
@@ -58,13 +57,12 @@
   padding: t.space(2) 0;
   font-size: t.font-size(base);
   font-weight: t.font-weight(medium);
-  color: t.color(fg-default);
+  color: t.color(ink);
   text-decoration: none;
   transition: t.motion(fast);
 
   &:hover {
     color: t.color(blue-deep);
-    text-decoration: underline;
   }
 }
 
@@ -86,14 +84,19 @@
 .signedIn {
   display: flex;
   align-items: center;
-  gap: t.space(3);
+  gap: t.space(4);
 }
 
-.panelLink {
+.greeting {
   font-size: t.font-size(sm);
-  font-weight: t.font-weight(semibold);
-  color: t.color(blue-deep);
+  color: t.color(ink);
   text-decoration: none;
+  transition: t.motion(fast);
+
+  strong {
+    color: t.color(blue-deep);
+    font-weight: t.font-weight(semibold);
+  }
 
   &:hover {
     text-decoration: underline;
@@ -110,8 +113,11 @@
   font-size: t.font-size(sm);
   color: t.color(fg-muted);
   cursor: pointer;
+  border-radius: t.radius(md);
 
-  &:hover { color: t.color(blue-deep); }
+  &:hover {
+    color: t.color(blue-deep);
+  }
 }
 
 // ───── Mobile (< md) ─────
@@ -132,7 +138,7 @@
   border: 0;
   background: none;
   border-radius: t.radius(lg);
-  color: t.color(fg-default);
+  color: t.color(ink);
   cursor: pointer;
 
   &:hover {
@@ -146,18 +152,17 @@
   inset-inline-start: 0;
   inset-inline-end: 0;
   background: t.color(white);
-  border-block-end: 1px solid t.color(border-default);
+  border-block-end: 1px solid t.color(gray-200);
   box-shadow: t.shadow(md);
   z-index: t.z(dropdown);
 }
 
 .mobilePanel {
+  @include m.container;
   display: flex;
   flex-direction: column;
   gap: t.space(5);
-  padding: t.space(5);
-  max-width: 1280px;
-  margin-inline: auto;
+  padding-block: t.space(5);
 }
 
 .mobileNav .navList {
@@ -176,7 +181,7 @@
   flex-direction: column;
   gap: t.space(3);
   padding-block-start: t.space(4);
-  border-block-start: 1px solid t.color(border-default);
+  border-block-start: 1px solid t.color(gray-200);
 
   .signedOut, .signedIn {
     flex-direction: column;
@@ -186,4 +191,9 @@
 
   .signedOut a { display: block; }
   .signedOut a button { width: 100%; }
+
+  .greeting {
+    padding: t.space(3) 0;
+    font-size: t.font-size(base);
+  }
 }
