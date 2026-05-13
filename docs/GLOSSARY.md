@@ -59,6 +59,21 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 
 ## Product concepts
 
+### Full-property lease (MVP leasing model)
+**Definition:** In MVP, a booking covers the **entire apartment** for a contiguous date range. Pricing is per-apartment (`listings.monthly_rent`), not per bed. A construction corporation pays for the whole listing or nothing — there is no partial-apartment booking, no per-bed pricing, no two-corp coexistence in one unit.
+**Availability:** binary — a listing is either **available** (`פנוי`) or **leased** (`מושכר`) for the requested date range. Computed by checking whether any `bookings` row with `status IN ('confirmed', 'paid', 'accepted')` overlaps the range. No fractional `available_beds`, no "3 of 8 beds taken" display.
+**`bed_count` is informational only:** the listing form still asks how many beds the apartment has, and the marketplace filter still supports "מינ׳ מיטות" so corporations can size against their crew, but `bed_count` does not drive pricing or partial bookings.
+**Booking math:** `Total = monthly_rent × months + 3% commission` (commission per DECISIONS_LOG 2026-05-12).
+**Future (Dreams):** partial / per-bed / per-worker leasing — including multi-corp coexistence — moves to `docs/specs/dreams/B2B_DREAMS.md`. That direction is right once the marketplace has volume; it's the wrong starting position.
+**See:** DECISIONS_LOG 2026-05-13 "MVP leasing model: full property only, binary availability"
+
+### Audit Pack (`תיק נכס`)
+**Status:** ⏸ **Deferred — not in MVP.** Lives on the corporate dashboard, which is itself post-MVP per BUILD_PLAN §3.F. Vocabulary and access rule are locked here so they don't drift when the feature ships.
+**Definition:** Downloadable archive of the compliance documents associated with a single property (lease, ownership proof, regulatory attestations, photos, etc.) — assembled for a construction corporation that has booked the property and needs the paperwork for its own regulator and audit purposes.
+**Canonical Hebrew translation:** **`תיק נכס`**. Use this string verbatim everywhere — UI labels, button copy, file names, email subject lines, FAQ answers. Never "חבילת ביקורת", "מסמכי נכס", "ארכיון נכס", or any other alternative.
+**Access rule:** downloadable **only** by users with role `construction_corporation`, and **only after** the requesting corporation has a `confirmed` booking on the property in question. Concretely: corporate user X can download the `תיק נכס` for listing Y iff there exists a `bookings` row where `corporation_id = X.id AND listing_id = Y AND status = 'confirmed'`. Owner-companies don't download a `תיק נכס` (they have direct access to their own property's documents). Admins can download any audit pack. Anonymous users cannot download under any circumstances.
+**See:** DECISIONS_LOG 2026-05-13 "Audit Pack: Hebrew translation + access rule locked"
+
 ### Booking System
 **Definition:** Daily hostel booking engine for the 4 AM HOSTELS properties.
 **Status:** Future, not MVP. See `specs/dreams/BOOKING_SYSTEM_DREAMS.md`.
@@ -154,7 +169,13 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **Definition:** Israeli municipal property tax. Tracked as a property cost component for Yield Calculator and reports.
 
 ### תקנות עובדים זרים (Foreign Workers Regulations)
-**Definition:** Israeli regulation governing housing standards for foreign workers. Key requirements: minimum 4m² per worker, ventilation, sanitary facilities (1:6 ratio), fire safety. Compliance is a core platform feature.
+**Definition:** Israeli regulation governing housing standards for foreign workers. Compliance is a core platform feature.
+**Key area requirement — per-bedroom, never aggregate (locked 2026-05-13):** the regulation requires **a minimum of 4 m² per bed within each bedroom**. A bedroom with N beds must be at least (4 × N) m² — for example, 3 beds → ≥ 12 m², 5 beds → ≥ 20 m². The minimum is calculated per individual bedroom, never averaged across the property; a property with one undersized bedroom fails compliance even if its total area exceeds the aggregate threshold.
+**Other key requirements:** ventilation, sanitary facilities (1:6 ratio), fire safety (see `Fire-safe (property amenity)` — deferred from MVP).
+**Canonical Hebrew phrasings:**
+- Long form (legal callout): *"תקנות עובדים זרים מחייבות מינימום 4 מ״ר לכל מיטה בכל חדר שינה. חדר שינה עם N מיטות חייב להיות לפחות (4 × N) מ״ר — לדוגמה: 3 מיטות → לפחות 12 מ״ר. חישוב לפי חדר, לא לפי ממוצע בנכס."*
+- Short form (stat tile / chip): *"4 מ״ר / למיטה (לפי חדר שינה)"*. Drop the legacy "4 מ״ר / לעובד" — it invites the wrong mental model.
+**See:** DECISIONS_LOG 2026-05-13 "תקנות עובדים זרים: 4 m² is per-bed-per-bedroom, never aggregate"
 
 ---
 
@@ -199,3 +220,6 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 | 2026-05-12 | Verification level entry marked deferred — verification system (all levels) out of MVP per DECISIONS_LOG 2026-05-12 | — |
 | 2026-05-12 | Added "Fire-safe (property amenity)" entry — deferred from MVP, definition locked per DECISIONS_LOG 2026-05-12 | — |
 | 2026-05-13 | Added "Bedrooms vs rooms" entry — locks `bedroom_count` (not `room_count`) and the Hebrew bedrooms/rooms distinction per DECISIONS_LOG 2026-05-13 | — |
+| 2026-05-13 | Added "Audit Pack (`תיק נכס`)" entry — locks canonical Hebrew translation and corporate-after-confirmed-booking access rule per DECISIONS_LOG 2026-05-13 | — |
+| 2026-05-13 | Clarified `תקנות עובדים זרים` 4 m² rule as per-bed-per-bedroom (never aggregate); locked canonical Hebrew long/short forms per DECISIONS_LOG 2026-05-13 | — |
+| 2026-05-13 | Added "Full-property lease (MVP leasing model)" entry — locks full-apartment-only leasing + binary availability per DECISIONS_LOG 2026-05-13 | — |

@@ -1,5 +1,7 @@
 # oz-marketplace · BUILD_PLAN
 
+> **⚠️ UI rebuild in progress (2026-05-13):** the entire UI surface (Phase 0 styles, Phase 1 primitives, Phase 2 layout, Phase 3 auth pages, Phase 4 marketplace + owner + booking pages) has been **deleted from the repo**. UI is being rebuilt fresh in **Claude Design**. The Phase 1 / 2 / 4 UI sections in this doc, the `recon/` brand materials, and any visual-pattern guidance below are historical reference — **not the source of truth for what exists in the codebase**. Schema (`supabase/`), server libraries (`lib/`), and product decisions in `DECISIONS_LOG.md` carry forward; everything visual does not. `app/layout.tsx` is kept as the Hebrew RTL + metadata shell (IRON_RULES 5, 9). The "SCSS only" stack note below is also historical — Claude Design will bring its own CSS solution.
+
 **Status:** CP-1 decisions locked · **Generated:** 2026-05-02 · **Owners:** Adir
 **Inputs consumed:** `recon/00-INDEX.md`, `04d-brand-tokens-extracted.md`, `04e-brand-components.md`, `05-oz-marketplace-state.md`, `10-open-questions.md`
 **Stack:** Next.js 16 App Router · React 19 · Supabase (Auth, Postgres, Storage, Edge Functions) · **SCSS only** · Hebrew RTL primary · Mobile-first
@@ -165,6 +167,7 @@ The original BUILD_PLAN had eight phases (Phase 4 corporate dashboard, Phase 5 m
 - Virtual tours
 - Ratings & reviews
 - **Verification system — all levels** (1 self-reported, 2 remote attestation, 3 paid on-site inspection). The `listings.verification_level` column exists but is not surfaced in MVP UI. See DECISIONS_LOG 2026-05-12.
+- **Partial / per-bed apartment leasing** — multi-corp coexistence within one apartment, per-bed pricing, fractional vacancy display. MVP supports full-property leases only with binary availability (`פנוי` / `מושכר`). See DECISIONS_LOG 2026-05-13 and `docs/specs/dreams/B2B_DREAMS.md`.
 - Neema fintech integration
 - Premium listing tiers / featured placement
 
@@ -536,6 +539,7 @@ The fresh `TASKS.md` opens with a phase tracker:
 - [ ] Yield calculator
 - [ ] Ratings & reviews
 - [ ] Verification system — all levels (1 self-reported, 2 remote attestation, 3 paid on-site inspection). Schema column exists but unused in MVP.
+- [ ] Partial / per-bed apartment leasing (multi-corp coexistence, per-bed pricing, fractional vacancy). MVP is full-property only with binary availability. See DECISIONS_LOG 2026-05-13.
 - [ ] Virtual tours
 - [ ] Neema integration (OQ-15)
 - [ ] Premium listing tiers / featured placement

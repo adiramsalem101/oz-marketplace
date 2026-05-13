@@ -637,4 +637,270 @@ it in immediately, and we don't want to block listing creation on it.
 
 ---
 
+## 2026-05-13 — Audit Pack: Hebrew translation + access rule locked
+
+**Context:** The legacy `worker-housing-platform` mockups
+(`recon/brand/mockups/01-corporate.md`, `00-uncategorized.md`) carry the
+"Audit Pack" feature on the corporate dashboard — a downloadable archive
+of compliance documents for a property. The term appears only in legacy
+mockups; it doesn't yet exist in any active oz-marketplace spec. The
+Hebrew translation and the access rule are locked here so they don't
+drift when the feature ships.
+
+**Decision:**
+
+- **Canonical Hebrew translation:** "Audit Pack" → **`תיק נכס`**. Use
+  this string everywhere — UI labels, button copy, file names, email
+  subject lines, FAQ answers. Don't introduce alternative translations
+  ("חבילת ביקורת", "מסמכי נכס", "ארכיון נכס", etc.) — they fragment
+  the vocabulary.
+- **Access rule:** the audit pack is downloadable **only** by users
+  with role `construction_corporation`, and **only after they have
+  completed a booking for the property in question**. "Completed" means
+  the booking has reached terminal success — `bookings.status =
+  'confirmed'` (signed-by-both contract + paid) and the corporation on
+  the booking is the requesting user.
+- Concretely: corporate user X can download the audit pack for listing
+  Y iff there exists a row in `bookings` where
+  `corporation_id = X.id AND listing_id = Y AND status = 'confirmed'`.
+- Owner-companies (the supply side) cannot download a `תיק נכס` — they
+  own the property and have direct access to the underlying documents.
+- Admins can download any audit pack.
+- Anonymous / unauthenticated users cannot download under any
+  circumstances.
+
+**MVP status:** Out of MVP. The corporate dashboard is itself deferred
+per BUILD_PLAN §3.F (2026-05-06 re-scope), and `תיק נכס` is a
+corporate-dashboard surface. This entry only locks the *vocabulary* and
+the *access rule* so that when the corporate dashboard does ship, both
+are settled inputs. No schema, no route, no component lands in MVP.
+
+**Implications:**
+
+- `GLOSSARY.md` gets a new "Audit Pack (`תיק נכס`)" entry.
+- When the corporate dashboard work begins (future phase, currently in
+  TASKS.md future-roadmap as "Corporate dashboard"), the audit-pack
+  download surface enforces the access rule above, ideally via an RLS
+  policy on the storage bucket (or via a server action that checks the
+  booking before serving the signed URL).
+- The legacy mockup pattern of placing an `ייצא Audit Pack` button on
+  any owner row is no longer correct — the button is only visible/
+  enabled on bookings the corporate user actually owns and that are
+  `confirmed`.
+- Translation in any future PROMPT_LIBRARY entry, BUILD_PLAN section,
+  or UI text must use `תיק נכס` verbatim.
+
+**Rationale:**
+
+- Locking the Hebrew translation prevents future drift. "Audit Pack"
+  is an English term; without a canonical Hebrew, every contributor
+  invents their own translation and the platform's vocabulary
+  fragments. `תיק נכס` ("property file") matches the Israeli legal/
+  real-estate convention for compiled property documentation.
+- Tying the download to a completed booking ensures corporations only
+  access compliance docs for properties they've actually committed to.
+  Pre-booking, the audit pack would be reconnaissance material — not
+  the intended use. Post-`confirmed`, it's a tenant's right to the
+  documentation they need for their own compliance / regulator
+  inquiries.
+
+**Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — תקנות עובדים זרים: 4 m² is per-bed-per-bedroom, never aggregate
+
+**Context:** `GLOSSARY.md` summarized the foreign-workers regulation as
+"minimum 4m² per worker", and homepage copy
+(`app/page.tsx`, `PROMPT_LIBRARY.md` stats strip + legal callout)
+phrased it as "מינימום 4 מ״ר לעובד". Both readings are ambiguous —
+they could be interpreted as "4 m² × workers, anywhere on the property"
+or "4 m² × beds in each bedroom". The legacy schema (recon)
+implemented it as a per-room minimum
+(`rooms.room_size_sqm ≥ beds_count × min_space_per_person_sqm`), but
+that detail never landed in oz-marketplace's active specs or copy.
+
+**Decision:** the rule is **per-bedroom, never aggregate**.
+
+- Every bedroom must provide **at least 4 m² per bed it contains**.
+- A bedroom with N beds must be ≥ (4 × N) m².
+- Examples:
+  - 3 beds → ≥ 12 m²
+  - 5 beds → ≥ 20 m²
+- The minimum is calculated **per individual bedroom**, never averaged
+  across the property. A property with one undersized bedroom fails
+  compliance even if its total area generously exceeds the aggregate
+  threshold.
+
+**Canonical phrasings (use these verbatim):**
+
+- **English:** *"Foreign Workers Regulations require a minimum of 4 m²
+  per bed within each bedroom. A bedroom with N beds must be at least
+  (4 × N) m² (e.g., 3 beds → ≥ 12 m²). This is per-bedroom; it is
+  never averaged across the property."*
+- **Hebrew (long form, legal callout):** *"תקנות עובדים זרים מחייבות
+  מינימום 4 מ״ר לכל מיטה בכל חדר שינה. חדר שינה עם N מיטות חייב להיות
+  לפחות (4 × N) מ״ר — לדוגמה: 3 מיטות → לפחות 12 מ״ר. חישוב לפי חדר,
+  לא לפי ממוצע בנכס."*
+- **Hebrew (short form, stat tile / chip):** *"4 מ״ר / למיטה (לפי
+  חדר שינה)"*. The legacy phrasing "4 מ״ר / לעובד" is dropped; "עובד"
+  was a usability shortcut that has now caused the ambiguity this entry
+  resolves.
+
+**Implications:**
+
+- `GLOSSARY.md` `תקנות עובדים זרים` entry is rewritten with the
+  per-bedroom phrasing.
+- `PROMPT_LIBRARY.md` homepage stats strip (`Stat icon="ruler" big='4
+  מ"ר' label="לעובד — חוקי"`) is updated to use the per-bed-per-room
+  short form.
+- `PROMPT_LIBRARY.md` legal callout sentence is updated to the long
+  form.
+- Shipped homepage copy at `app/page.tsx` legal callout (~line 118) and
+  stats strip use the legacy "מינימום 4 מ״ר לעובד" phrasing — flagged
+  in `TASKS.md` polish backlog for update.
+- Once the listing form's new fields ship (DECISIONS_LOG 2026-05-13 —
+  bedrooms + amenities), this rule is the natural validation target:
+  the marketplace can flag listings where `area_sqm / bedroom_count <
+  4 × (bed_count / bedroom_count)` looks suspicious — though that's a
+  derivation only, not a hard validation, since the actual rule is
+  per-individual-bedroom and the schema doesn't yet break beds down by
+  bedroom (`bed_count` is property-level total). Per-bedroom bed
+  capacity is a future schema extension if precise validation becomes
+  worth it.
+- When verification work eventually resumes (verification system
+  currently deferred, DECISIONS_LOG 2026-05-12), Level 2 remote
+  attestation should specifically confirm that each bedroom's area
+  meets the per-bedroom minimum — not just the property's total area.
+
+**Rationale:**
+
+- The regulation itself is per-bedroom (per the legacy implementation
+  pattern and the way the Ministry of Labor's housing inspectors apply
+  it). Averaging across the property masks bedrooms that are below
+  threshold.
+- The "4 מ״ר לעובד" short form invites the wrong mental model — a
+  buyer counting workers × 4 m² and comparing to total area would
+  conclude many non-compliant properties are compliant. The "לפי
+  מיטה / לפי חדר שינה" reframing matches the actual rule.
+
+**Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — MVP leasing model: full property only, binary availability
+
+**Context:** The current schema and UI model bookings at the **bed**
+level — `listings.monthly_rent_per_bed`, `bookings.worker_count`,
+`bookings.monthly_rent_total = workers × per_bed × months`. The booking
+form asks the corporation how many workers it wants to house, and
+listing cards display a fractional vacancy (`available_beds / bed_count`).
+This was inherited from the legacy spec, which envisioned a flexible
+partial-leasing marketplace.
+
+For the first MVP, this is too much surface area for too little payoff.
+Corporations buying foreign-worker housing in Gush Dan overwhelmingly
+take entire apartments. Partial-leasing introduces hard problems
+(occupancy tracking, two-corp coexistence in one unit, per-bed contract
+generation, partial-refund accounting) that we shouldn't solve before
+we know they're worth solving.
+
+**Decision:** **MVP supports full-property leases only.** A booking
+covers the entire listing for a contiguous date range; pricing is
+per-apartment, not per-bed; and availability is a binary "available
+vs leased" per requested date range, not a fractional bed count.
+
+**Concretely:**
+
+- **Pricing model.** Listings have a single price: `monthly_rent`
+  (integer ILS, no decimals). It represents the rent for the **whole
+  apartment per month**, not per bed. The Hebrew label on the listing
+  form becomes "שכירות חודשית לדירה (₪)". The "/מיטה" suffix is dropped
+  everywhere in the UI; the price-anchor on cards/detail reads
+  "₪X,XXX / חודש".
+- **Booking model.** A booking covers the full apartment. The
+  corporate booking form **drops the "number of workers" input** —
+  there's nothing to size against pricing. Total payable =
+  `monthly_rent × months + (monthly_rent × months × 3%)` per
+  DECISIONS_LOG 2026-05-12 commission lock.
+- **Availability model.** For any requested date range, a listing is
+  either **available** or **leased** — binary. A listing is "leased"
+  for a date range if any `bookings` row with that `listing_id` and
+  `status IN ('confirmed', 'paid', 'accepted')` overlaps the range.
+  Otherwise it's "available". No fractional `available_beds`
+  computation; no "3 of 8 beds taken" display.
+- **`bed_count` stays informational.** Construction corporations still
+  care about capacity ("does this apartment fit my 12-person crew?"),
+  so the listing form still asks `bed_count` and the marketplace
+  filter "מינ׳ מיטות" still works. It just doesn't drive pricing or
+  partial bookings.
+
+**Schema implications:**
+
+- Rename `listings.monthly_rent_per_bed` → `listings.monthly_rent`
+  (still `integer NOT NULL CHECK (monthly_rent > 0)`). Existing seed
+  data is pre-launch; values that were "rent per bed" need a manual
+  re-key to "rent for the whole apartment". No data migration logic
+  in the SQL — the rename happens in a new migration; team backfills
+  any test listings by hand.
+- `bookings.worker_count` and `bookings.monthly_rent_total` are no
+  longer driven by the UI. Leave the columns in place for now (don't
+  drop on the path to MVP — destructive migrations get blocked by
+  IRON_RULE 3); the booking flow simply stops populating
+  `worker_count` (or stamps it from `listings.bed_count` as a default
+  for compatibility). `monthly_rent_total` continues to snapshot the
+  contractual rent total, which is now `monthly_rent × months`.
+- No new column is needed for availability — the binary status is
+  derived from `bookings` rows.
+
+**UI implications (a small inventory):**
+
+- `app/owner/_components/ListingForm.tsx` — the numeric input labeled
+  "מחיר למיטה / חודש (₪)" becomes "שכירות חודשית לדירה (₪)";
+  field name `monthly_rent_per_bed` → `monthly_rent`.
+- `app/listings/[id]/BookingRequestForm.tsx` — drop the "מספר עובדים"
+  input entirely; price summary is `שכירות = monthly_rent × months`,
+  `עמלת עוז (3%)`, `סה״כ`.
+- `app/listings/[id]/page.tsx` (public detail) — price-anchor reads
+  `₪X,XXX / חודש`, not `/מיטה/חודש`. `bed_count` stays in the
+  capacity bullet list as "X מיטות".
+- `app/listings/page.tsx` (marketplace) — drop the `maxRent` filter
+  in its current "per-bed" framing or repurpose it to "max monthly
+  rent for apartment". Keep `minBeds`. Card price: `₪X,XXX / חודש`,
+  no `/מיטה`.
+- `app/page.tsx` (homepage) — listings preview card text changes from
+  `{bed_count} מיטות · ₪{monthly_rent_per_bed}/מיטה` to `{bed_count}
+  מיטות · ₪{monthly_rent} / חודש`.
+- `ListingCard` overlay pill — replaces the fractional vacancy with a
+  binary "פנוי" / "מושכר" pill (`Pill tone="green"` for available,
+  `Pill tone="gray"` for leased). The pill is computed against
+  "today" by default, or against the requested date range if the user
+  has filters active. The `lib/supabase/service.ts` service-role
+  aggregator simplifies to a one-line "any overlapping confirmed
+  booking?" check per listing.
+
+**Future (Dreams):** the partial / per-bed / per-worker leasing
+model — the one currently encoded but stripped from MVP — moves to
+`docs/specs/dreams/B2B_DREAMS.md` as "Partial apartment leasing
+(per-bed pricing, multi-corp occupancy)". Schema sketch preserved
+there so it's easy to reconstruct: re-introduce `monthly_rent_per_bed`
+alongside `monthly_rent` (so listings can opt in), keep
+`bookings.worker_count` populated by a real input, add a `bed_holds`
+table for sub-listing inventory, etc. This is the right direction
+once the marketplace has volume; it's the wrong starting position.
+
+**Rationale:**
+
+- Cuts the contract template down to one form (whole-apartment lease),
+  not two (whole vs partial).
+- Cuts the booking math, the availability computation, and the
+  occupancy display each to one line.
+- Cuts the support-burden risk of two corps colliding in one
+  apartment in MVP.
+- Matches actual buyer behavior in the gush-dan pilot scope.
+
+**Status:** ✅ Locked.
+
+---
+
 **End of decisions log. Append new entries below this line.**
