@@ -14,7 +14,7 @@ oz-marketplace is a new project inspired by `worker-housing-platform` (legacy). 
 1. **B2B marketplace** — owner-companies list properties; construction corporations browse, request to book, pay full stay upfront + OZ commission via Pelecard; sign a digital lease contract via HelloSign.
 2. **Hostels page** — public landing page with link-out cards to FrontDeskMaster's hosted booking for the four AM HOSTELS properties (Jerusalem / Tel Aviv / Haifa / Tiberias).
 
-**Out of MVP** (deferred): corporate dashboard, B2C / individual-owner product, native hostel booking engine, yield calculator, AI Import, virtual tours, ratings system, Tier-3 verification, Neema integration. See `DECISIONS_LOG.md` 2026-05-06 for the re-scope rationale.
+**Out of MVP** (deferred): corporate dashboard, B2C / individual-owner product, native hostel booking engine, yield calculator, AI Import, virtual tours, ratings system, **verification system (all levels — 1, 2, and 3)**, Neema integration. See `DECISIONS_LOG.md` 2026-05-06 for the re-scope rationale and 2026-05-12 for the verification deferral.
 
 | Checkpoint | What you approve | Status |
 |---|---|---|
@@ -74,7 +74,7 @@ Five corrections from the legacy state are folded into this build during the sca
 |---|---|
 | **OQ-2** | Drop `hostel_bookings.stripe_session_id`. **Drop all legacy columns no longer needed** — the rebuild does not carry over dead schema. |
 | **OQ-3 + OQ-4** | Single source of truth for roles. Enum: `user_role` with values `('owner_individual', 'owner_company', 'construction_corporation', 'admin')`. The `profiles.role` text column is replaced by this enum. The `handle_new_user()` trigger reads role from `raw_user_meta_data.role` with a default of `owner_company`. **Two roles are signupable in MVP:** `owner_company` (supply-side, lists properties) and `construction_corporation` (demand-side, books properties). Sign-up persona picker offers three options: "company" (creates `owner_company`), "construction corporation" (creates `construction_corporation`), and "individual" (no account created — friendly "coming soon" message). `owner_individual` is reserved but unreachable in MVP signup — activated in a future phase. `admin` is admin-invited via Studio. The legacy roles `manager_property`, `field_staff`, `ops`, `company`, `admin_corporate`, `b2c_owner`, `corporate_member`, `b2b_owner` are not part of MVP. *Superseded twice — original CP-1 lock 2026-05-02 used b2c/b2b naming; 2026-05-05 changed enum names; 2026-05-06 added `construction_corporation` as signupable. See `DECISIONS_LOG.md` for rationale.* |
-| **OQ-6** | `listings.verification_level smallint NOT NULL CHECK (verification_level IN (1,2,3))`. Legacy `verification_tier` A/B/C is dropped. **Naming alignment everywhere:** DB column `verification_level`; TS type `VerificationLevel`; component `VerificationLevelBadge`; SCSS module `VerificationLevelBadge.module.scss`. Hebrew UI labels are independent and follow the brand glossary. |
+| **OQ-6** | `listings.verification_level smallint NOT NULL CHECK (verification_level IN (1,2,3))`. Legacy `verification_tier` A/B/C is dropped. **Naming alignment everywhere:** DB column `verification_level`; TS type `VerificationLevel`; component `VerificationLevelBadge`; SCSS module `VerificationLevelBadge.module.scss`. Hebrew UI labels are independent and follow the brand glossary. **Superseded for MVP, 2026-05-12:** the verification system (all levels) is deferred. The column exists in the schema (Phase 3 migration shipped) and defaults to `1`, but no UI surfaces verification in MVP — no badge on listing cards, no attestation flow, no level-2 review queue. The primitive and SCSS module remain in the codebase as dead-but-harmless until the verification system is re-scoped post-MVP. |
 | **OQ-7** | `get_signed_url()` is rewritten to use Supabase's native `storage.create_signed_url()` helper — no hardcoded project URL. |
 | **OQ-17** | All hostel slugs in DB use kebab-case (`tel-aviv`, not `telaviv`). Schema CHECK constraint updated. |
 | **OQ-24** | `KpiCard.module.scss` uses `inset-inline-end` instead of physical `left`. |
@@ -85,7 +85,9 @@ Five corrections from the legacy state are folded into this build during the sca
 
 The legacy docs reference 5 files that don't exist on disk (`BOOKING_SYSTEM_MVP.md`, `BOOKING_SYSTEM_DREAMS.md`, `VIRTUAL_TOUR_SPECS.md`, `PROJECT_SPECS.md`, `payment-provider-analysis.md`). The new repo's `docs/` is built fresh and only references files that actually exist. The undocumented "demand side" persona (OQ-12) gets a new `docs/specs/DEMAND_SIDE.md` that fills the gap.
 
-### §3.D — Verification level (clarification)
+### §3.D — Verification level (deferred from MVP)
+
+> **Deferred 2026-05-12.** The verification system (all levels — 1, 2, and 3) is out of MVP. The `listings.verification_level` column remains in the schema (default `1`) but is not surfaced in UI. The text below is preserved as the target design for when the verification system is re-scoped post-MVP.
 
 A verification level is the trust grade of a property listing. Higher level = more verification = better marketplace placement and stronger trust signals to buyers (construction corporations).
 
@@ -162,7 +164,7 @@ The original BUILD_PLAN had eight phases (Phase 4 corporate dashboard, Phase 5 m
 - Yield calculator
 - Virtual tours
 - Ratings & reviews
-- Tier-3 verification (paid on-site inspection)
+- **Verification system — all levels** (1 self-reported, 2 remote attestation, 3 paid on-site inspection). The `listings.verification_level` column exists but is not surfaced in MVP UI. See DECISIONS_LOG 2026-05-12.
 - Neema fintech integration
 - Premium listing tiers / featured placement
 
@@ -326,7 +328,7 @@ components/
 │   ├── Pill/
 │   ├── Chip/
 │   ├── Badge/
-│   ├── VerificationLevelBadge/    ← reads `verification_level` (1|2|3)
+│   ├── VerificationLevelBadge/    ← reads `verification_level` (1|2|3) — built in Phase 1, NOT rendered in MVP UI (see §3.D)
 │   ├── Avatar/
 │   ├── ProgressBar/
 │   └── Icon/                      ← consumes the SVG sprite from public/icons.svg
@@ -385,7 +387,7 @@ DB column names, TS type names, and component names stay aligned wherever a colu
 
 | DB column | TS type | Component | Module |
 |---|---|---|---|
-| `listings.verification_level` | `VerificationLevel` | `VerificationLevelBadge` | `VerificationLevelBadge.module.scss` |
+| `listings.verification_level` | `VerificationLevel` | `VerificationLevelBadge` *(not rendered in MVP — see §3.D)* | `VerificationLevelBadge.module.scss` |
 | `profiles.role` (`user_role` enum) | `UserRole` | `RoleBadge` | `RoleBadge.module.scss` |
 | `hostel_bookings.status` | `HostelBookingStatus` | `HostelBookingStatusPill` | `HostelBookingStatusPill.module.scss` |
 
@@ -437,7 +439,7 @@ Each phase is an atomic deliverable to Claude Code. You commit after each phase,
 - Migration #1: enums (`user_role` per §3.B), `profiles`, `auth.users` trigger (persona-aware).
 - Migration #2: RLS skeleton.
 - `app/(auth)/` — Google OAuth + Twilio OTP, persona-aware role assignment.
-- Verification level as `listings.verification_level smallint`.
+- Verification level column (`listings.verification_level smallint`) lands in the Phase 4 listings migration but stays dormant for MVP — see §3.D and DECISIONS_LOG 2026-05-12.
 
 **→ Checkpoint CP-3.** Run on staging before any production deploy.
 
@@ -533,7 +535,7 @@ The fresh `TASKS.md` opens with a phase tracker:
 - [ ] Corporate dashboard (KPIs, AI Import, Excel reports, role-based corporate permissions, bulk worker upload)
 - [ ] Yield calculator
 - [ ] Ratings & reviews
-- [ ] Tier-3 verification (paid on-site inspection)
+- [ ] Verification system — all levels (1 self-reported, 2 remote attestation, 3 paid on-site inspection). Schema column exists but unused in MVP.
 - [ ] Virtual tours
 - [ ] Neema integration (OQ-15)
 - [ ] Premium listing tiers / featured placement

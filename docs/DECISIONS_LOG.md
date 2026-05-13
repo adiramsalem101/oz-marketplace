@@ -146,7 +146,7 @@ Every locked product decision, with date and rationale. Append-only — when a d
 
 **Context:** Tier 3 = paid on-site inspection (₪750 / ₪500 re-visit).
 **Decision:** Levels 1 (default) + 2 (remote attestation) are MVP. Level 3 is future. (Note: oz-marketplace renames "tier" → `verification_level`; see CP-1 OQ-6.)
-**Status:** ✅ Locked
+**Status:** 🔄 Superseded by 2026-05-12 — Levels 1 and 2 are also now deferred. The full verification system is out of MVP.
 
 ---
 
@@ -324,7 +324,8 @@ Original BUILD_PLAN had eight phases including a corporate dashboard
 
 **Deferred (not in MVP):** corporate dashboard, B2C / individual-owner
 product, native hostel booking engine, yield calculator, AI Import,
-virtual tours, ratings, Tier-3 verification, Neema integration, premium
+virtual tours, ratings, Tier-3 verification (and later, per 2026-05-12,
+the entire verification system — all levels), Neema integration, premium
 listing tiers.
 
 **"Production-ready" means production-ready** — no half-built features
@@ -390,6 +391,7 @@ Logged in `TASKS.md` Future-roadmap.
   flagged off and is a future iteration.)
 - **Total amount = (monthly_rent × months) + OZ commission** (5% of
   rent total). Snapshot stored on the booking row at request time.
+  🔄 *The 5% rate is superseded by the 2026-05-12 entry below — MVP charges 3%.*
 
 ### Contract: HelloSign with standardized lease
 
@@ -408,6 +410,230 @@ Per the existing workerhome.co.il pattern: hero + hostels strip +
 listings preview + how-it-works + FAQ + footer. Public, no auth gate
 on browse. Dropped from the existing site for MVP scope: B2C section,
 yield calculator, testimonials, Tier-3 verification badges.
+
+---
+
+## 2026-05-12 — Verification system (all levels) deferred from MVP
+
+**Context:** Earlier rescope (2026-04-30 + 2026-05-06) deferred only Tier 3
+(paid on-site inspection) and kept Levels 1 (self-reported owner identity)
+and 2 (remote attestation) as in-scope for MVP. The verification system
+remained surfaced on listing cards via `VerificationLevelBadge`, and the
+Phase 4 visual rebuild shipped a verification pill on every listing card
+(`ListingCard` overlay, `LAYOUT_INSPIRATION §5`).
+
+**Decision:** The entire verification system — Levels 1, 2, and 3 — is
+deferred from MVP. No tier of verification ships in the first launch.
+
+**Rationale:**
+
+- Level-2 attestation requires an ops review flow (document upload,
+  reviewer queue, evidence storage) that doesn't exist and isn't worth
+  building before we have listings volume to review.
+- Showing a "Level 1 — self-reported" badge with no path to upgrade
+  signals weakness rather than trust. Better to ship no badge than a
+  badge that reads as "the owner says so."
+- Trust signals in MVP come from: KYC at sign-up (owner-company has
+  Israeli company registration), the contract flow (HelloSign signed
+  lease), and Pelecard's regulated payment rail. Verification can be
+  layered in once the marketplace has real listing volume and we know
+  what level of trust signal corporations actually need.
+
+**Implications:**
+
+- `listings.verification_level` column stays in the schema (Phase 4
+  migration `20260506000001_listings_schema.sql` already shipped) with
+  default `1`. Not removed — keeping the column is cheap and avoids a
+  destructive migration; surfacing it post-MVP is a UI-only change.
+- `feature_flags.listing.tier3_verification = false` (seeded by the same
+  migration) is now joined by an implicit "all verification disabled in
+  MVP" — no flag added; the UI simply doesn't render the badge.
+- `VerificationLevelBadge` primitive (Phase 1) stays in the codebase as
+  dead code until verification work resumes. Do not delete.
+- `ListingCard` should drop the verification pill overlay. The vacancy
+  pill remains. See follow-up task in `TASKS.md`.
+- `LAYOUT_INSPIRATION.md §5` reconstructed-card pattern is updated to
+  reflect "vacancy pill only" for MVP.
+- `GLOSSARY.md` entry for "Verification level" is marked deferred.
+- BUILD_PLAN §3.D, §3.F deferred list, §5 component map, §8 future-
+  roadmap list, and TASKS.md future-roadmap section are updated.
+
+**Status:** ✅ Locked. Supersedes the 2026-04-30 "Tier 3 deferred" entry
+to the extent that Tiers 1 and 2 are now also deferred.
+
+---
+
+## 2026-05-12 — OZ commission rate: 3% (MVP)
+
+**Context:** The 2026-05-06 entry locked the commission at 5% of the rent
+total. The PROMPT_LIBRARY spec, the shipped homepage copy
+(`app/page.tsx`), and the in-flight `BookingRequestForm` all reference
+5%.
+
+**Decision:** For the first MVP — and until explicitly changed in a
+future entry — OZ charges **3%** commission on rent total, not 5%.
+
+**Implications:**
+
+- `OZ_COMMISSION_RATE` constant moves from `0.05` → `0.03`. Currently
+  hardcoded in `app/listings/[id]/BookingRequestForm.tsx`; should also
+  move to a single source (config table or `feature_flags`-adjacent
+  table) so it's not duplicated across UI strings — but for MVP, hand-
+  update the constant and the two homepage copy strings is acceptable.
+- Hebrew copy referencing "5% עמלה" needs to flip to "3% עמלה":
+  - `app/page.tsx` hero terms line (~line 49)
+  - `app/page.tsx` FAQ ("מה עלות השירות?") (~line 135)
+  - `app/listings/[id]/BookingRequestForm.tsx` summary row label
+- `PROMPT_LIBRARY.md` Phase 4 CP-4c spec is amended to 3%.
+- The booking row snapshot still stores the absolute `oz_commission`
+  amount in agorot, not a rate — historical bookings remain accurate
+  if/when the rate changes again.
+
+**Rationale:** Business-side direction; lowers friction for owner-
+companies during the pilot. Easy to revisit once we have transaction
+volume to validate margin.
+
+**Status:** ✅ Locked. Supersedes the rate stated in the 2026-05-06
+"Payments + commission flow" entry above (3% replaces 5%); all other
+elements of that entry (Pelecard Link b'Click, money flow A, snapshot
+on booking row) stand.
+
+---
+
+## 2026-05-12 — Fire-safety amenity: deferred, definition locked
+
+**Context:** Earlier specs (legacy `properties` schema and the foreign-
+worker regulations summary in `GLOSSARY.md`) reference fire safety as a
+compliance-relevant property attribute. The current
+`listings` schema has no fire-safety column. The definition of
+"fire-safe" hasn't been pinned down anywhere in `docs/`.
+
+**Decision:**
+
+- **Definition:** a property is "fire-safe" iff it has **a smoke/heat
+  detector AND a fire extinguisher**. Both required; neither alone
+  counts.
+- **Out of MVP:** no `has_fire_safety` (or equivalent) column is added
+  to `listings` in MVP, and no fire-safety amenity surface ships on
+  listing creation, listing detail, or marketplace filters.
+- **Future iteration:** add the amenity in a later iteration alongside
+  the existing extensible amenity set (`has_kitchen`, `has_wifi`,
+  `has_parking` in `listings`). When added: boolean column
+  `has_fire_safety` with default `false`; Hebrew label "בטיחות אש
+  (גלאי עשן + מטף)"; surfaced as a filter on `/listings` and as a
+  badge/pill on the listing detail page.
+
+**Rationale:** Fire-safety is a meaningful trust signal for foreign-
+worker housing (per `תקנות עובדים זרים`), but it requires owner self-
+attestation discipline and ideally a verification path to be credible
+— and verification is itself deferred per 2026-05-12. Shipping a self-
+reported boolean today with no path to validate it would be misleading.
+Better to add it when we have the broader trust framework to support
+it.
+
+**Implications:**
+
+- `GLOSSARY.md` gets a new "Fire-safe (property amenity)" entry with
+  the definition and deferral note.
+- `TASKS.md` future-roadmap gets an entry for "Add fire-safety
+  amenity to listings (definition: smoke detector + fire
+  extinguisher)".
+- `BUILD_PLAN.md` §3.F deferred list is not updated — the amenity is
+  small enough that it sits under "extensible amenity set" in
+  `listings` and doesn't need top-level mention. It's tracked in
+  `TASKS.md` instead.
+- `GLOSSARY.md` `תקנות עובדים זרים` entry already mentions "fire
+  safety" as a regulatory requirement — that stays correct (the
+  regulation requires it; we just don't expose it as a structured
+  attribute yet).
+
+**Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — Listing fields: bedrooms (not rooms) + four amenities
+
+**Context:** The current `listings` schema (Phase 4 migration shipped)
+captures `bed_count`, `area_sqm`, `bathroom_count`, and three amenity
+booleans (`has_kitchen`, `has_wifi`, `has_parking`). The owner listing
+form mirrors those fields. The spec is missing several attributes that
+matter to construction-corporation buyers when evaluating a property
+for foreign-worker housing.
+
+**Decision:** Add the following fields to `listings` and to the owner
+listing-creation/edit form.
+
+**Bedrooms — not rooms.** The owner is asked **"how many *bedrooms*"**
+(`חדרי שינה`), not "how many *rooms*" (`חדרים`). This distinction is
+load-bearing in Israeli real-estate vocabulary: a "4-room apartment"
+(`דירת 4 חדרים`) conventionally means 3 bedrooms + 1 living room.
+Counting rooms inflates the number and is ambiguous; counting bedrooms
+is unambiguous and matches the buyer's actual question (how many
+sleeping spaces can I configure?).
+
+**New columns:**
+
+| Column | Type | Default | Hebrew label |
+|---|---|---|---|
+| `bedroom_count` | `smallint` (nullable) | — | `מספר חדרי שינה` |
+| `has_living_room` | `boolean NOT NULL` | `false` | `סלון` |
+| `has_bunk_beds` | `boolean NOT NULL` | `false` | `מיטות קומותיים` |
+| `has_ac` | `boolean NOT NULL` | `false` | `מזגן` |
+| `has_gas_cooking` | `boolean NOT NULL` | `false` | `כיריים גז` |
+
+Sits alongside existing extensible amenities. `bedroom_count` is
+nullable (same pattern as `bathroom_count`) — not every owner will fill
+it in immediately, and we don't want to block listing creation on it.
+
+**Naming notes:**
+
+- `bedroom_count`, **never** `room_count` / `rooms` / `room_amount`.
+  If someone proposes a "number of rooms" field in the future, push
+  back and confirm whether they actually mean bedrooms (almost always
+  yes) — and use `bedroom_count`.
+- `has_ac` (not `has_air_conditioning`) for symmetry with `has_wifi`.
+- `has_gas_cooking` captures specifically a gas stovetop / `כיריים גז`
+  (the common Israeli kitchen setup). A future iteration can add
+  `has_electric_cooking` if induction/electric becomes relevant.
+- `has_bunk_beds` is a boolean for now ("does the unit have bunk beds
+  available?"). Could become a count if owners need to express
+  capacity precisely; revisit when there's actual feedback.
+
+**Implications:**
+
+- New migration adds the five columns to `listings`. Existing rows
+  backfill: `bedroom_count = NULL`, the four booleans = `false`.
+- `app/owner/_components/ListingForm.types.ts` adds the five fields
+  to `ListingFormValues`.
+- `app/owner/_components/ListingForm.tsx` adds:
+  - one numeric input for `bedroom_count` (Hebrew label
+    `מספר חדרי שינה`, placeholder hint clarifying it's bedrooms not
+    rooms)
+  - four checkbox amenities (`סלון`, `מיטות קומותיים`, `מזגן`,
+    `כיריים גז`) in the existing amenities group
+- `app/owner/listings/[id]/page.tsx` insert/update payloads pass the
+  five new fields.
+- Defaults in `ListingForm.tsx`: `bedroom_count: undefined`,
+  `has_living_room: false`, `has_bunk_beds: false`, `has_ac: false`,
+  `has_gas_cooking: false`.
+- Listing detail (`app/listings/[id]/page.tsx`) and marketplace
+  card/filter surfaces can render these progressively — not required
+  to ship in the same change as the schema/form.
+- `PROMPT_LIBRARY.md` schema block and ListingForm code block are
+  amended.
+
+**Rationale:**
+
+- Construction corporations housing crews want to know how many
+  sleeping spaces a unit has (`bedroom_count`) and whether they can
+  double-up with bunks (`has_bunk_beds`).
+- A/C, gas cooking, and a living room are the three most-asked
+  amenities for crew housing beyond what's already captured
+  (kitchen / wifi / parking).
+- Bedrooms vs rooms is a Hebrew-language trap that has bitten other
+  Israeli proptech products; locking it here so we don't fall into it.
+
+**Status:** ✅ Locked.
 
 ---
 

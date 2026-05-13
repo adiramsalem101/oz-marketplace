@@ -73,14 +73,31 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **Definition:** Sister project (`pakalnofesh.co.il`) — a marketplace for Israeli vacation experiences for IDF reservists. Built by Alon using the same stack (Next.js + Supabase + Vercel) and Pelecard payment integration. The implementation pattern that the oz-marketplace payment integration mirrors.
 **See:** `IRON_RULES.md` Rule 2
 
+### Bedrooms vs rooms (`חדרי שינה` vs `חדרים`)
+**Definition:** In oz-marketplace, the listing form asks the owner how many **bedrooms** (`חדרי שינה`) the apartment has — **not** how many **rooms** (`חדרים`).
+**Why this matters:** In Israeli real-estate vocabulary, a "4-room apartment" (`דירת 4 חדרים`) conventionally means 3 bedrooms + 1 living room. Counting "rooms" inflates the number and is ambiguous; counting "bedrooms" is unambiguous and matches the buyer's actual question (how many sleeping spaces can be configured?).
+**Schema:** `listings.bedroom_count smallint` (nullable, per future migration). Hebrew label on the form: `מספר חדרי שינה`. Never `room_count` / `rooms` / `room_amount`.
+**Related:** The living room is captured separately as a boolean amenity (`listings.has_living_room` — Hebrew label `סלון`), so an owner with a 3-bedroom + living room apartment marks `bedroom_count = 3` and `has_living_room = true`.
+**See:** DECISIONS_LOG 2026-05-13 "Listing fields: bedrooms (not rooms) + four amenities"
+
+### Fire-safe (property amenity)
+**Status:** ⏸ **Deferred — not in MVP** (DECISIONS_LOG 2026-05-12). The amenity is defined here so the meaning is locked when it's introduced in a later iteration.
+**Definition:** A property is "fire-safe" iff it has **both** a smoke/heat detector **and** a fire extinguisher. Both are required; neither alone qualifies.
+**Future schema:** boolean column `has_fire_safety` on `listings`, default `false`, sitting alongside the existing extensible amenities (`has_kitchen`, `has_wifi`, `has_parking`).
+**Hebrew label (future UI):** "בטיחות אש (גלאי עשן + מטף)".
+**Why deferred:** fire-safety is a meaningful trust signal for foreign-worker housing (per `תקנות עובדים זרים`), but a self-reported boolean has limited value without a verification path — and verification is also deferred (DECISIONS_LOG 2026-05-12). Shipping together once both land.
+**See:** DECISIONS_LOG 2026-05-12 "Fire-safety amenity: deferred, definition locked"
+
 ### Verification level (1 / 2 / 3)
-**Definition:** A verification level is the trust grade of a property listing. Higher level = more verification = better marketplace placement and stronger trust signals to buyers. Stored as `listings.verification_level smallint` (1, 2, or 3).
+**Status:** ⏸ **Deferred — not in MVP** (DECISIONS_LOG 2026-05-12). The full verification system, including all three levels, is post-MVP. The schema column and primitive remain in the codebase but no UI surfaces verification in the first launch.
+**Definition (target design, for when verification work resumes):** A verification level is the trust grade of a property listing. Higher level = more verification = better marketplace placement and stronger trust signals to buyers. Stored as `listings.verification_level smallint` (1, 2, or 3).
 **Levels:**
 - **1** — Owner identity (ID document + selfie). Default. Hebrew badge: "פרטים מהבעלים".
 - **2** — Level 1 + property documents (deed/lease) + photos verified by ops. Hebrew badge: "✓ מאומת מרחוק".
-- **3** — Level 2 + physical inspection by field staff + full compliance check. Future per `DECISIONS_LOG.md` (Tier 3 deferred).
+- **3** — Level 2 + physical inspection by field staff + full compliance check.
+**MVP trust signals (replacing verification):** KYC on owner-company sign-up, HelloSign-signed lease contract, Pelecard-regulated payment rail.
 **Naming alignment:** DB column `verification_level`; TS type `VerificationLevel`; component `<VerificationLevelBadge>`; SCSS module `VerificationLevelBadge.module.scss`. Replaces the legacy A/B/C "verification_tier" terminology.
-**See:** BUILD_PLAN §3.D, §3.B (OQ-6)
+**See:** BUILD_PLAN §3.D, §3.B (OQ-6); DECISIONS_LOG 2026-05-12
 
 ---
 
@@ -179,3 +196,6 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 |---|---|---|
 | 2026-04-30 | Initial glossary (in legacy repo) | Adir |
 | 2026-05-02 | Ported to oz-marketplace; verification_tier A/B/C → verification_level 1/2/3; property_owners → owners; user_role enum entry added; CP-N and OQ-N entries added | Phase 0 |
+| 2026-05-12 | Verification level entry marked deferred — verification system (all levels) out of MVP per DECISIONS_LOG 2026-05-12 | — |
+| 2026-05-12 | Added "Fire-safe (property amenity)" entry — deferred from MVP, definition locked per DECISIONS_LOG 2026-05-12 | — |
+| 2026-05-13 | Added "Bedrooms vs rooms" entry — locks `bedroom_count` (not `room_count`) and the Hebrew bedrooms/rooms distinction per DECISIONS_LOG 2026-05-13 | — |

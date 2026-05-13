@@ -56,6 +56,9 @@ _None._ CP-4c prereq credentials are pending Adir / Alon but don't block scoping
 - **2026-05-02 — Phase 0 — Scaffold + token system + docs skeleton**: Next 16 + React 19 scaffold, SCSS token system, Hebrew RTL, fonts, icon sprite, `.env.example`, fresh `docs/`.
 
 ## Polish backlog (Phase 5)
+- [ ] **Remove verification pill from `ListingCard`** (DECISIONS_LOG 2026-05-12). The Phase 4 visual rebuild shipped a verification pill overlay on listing cards; the verification system is now out of MVP. Drop the pill (vacancy pill stays); keep `VerificationLevelBadge` primitive in the codebase as dead code; keep the `listings.verification_level` column with default `1`. Also drop any remaining references to verification from the public homepage copy/FAQ ("נכסים שעברו ביקורת מסמכים נושאים תג אימות", "ביקורת פיזית ותג אימות — בקרוב") if still present.
+- [ ] **Flip OZ commission rate from 5% to 3%** (DECISIONS_LOG 2026-05-12). Update `OZ_COMMISSION_RATE = 0.05` → `0.03` in `app/listings/[id]/BookingRequestForm.tsx`, and flip the three Hebrew copy strings: homepage hero terms line + homepage FAQ + booking-form summary row label.
+- [ ] **Add listing fields: bedrooms + four amenities** (DECISIONS_LOG 2026-05-13). New migration on `listings`: add `bedroom_count smallint` (nullable), `has_living_room boolean NOT NULL DEFAULT false`, `has_bunk_beds boolean NOT NULL DEFAULT false`, `has_ac boolean NOT NULL DEFAULT false`, `has_gas_cooking boolean NOT NULL DEFAULT false`. Update `ListingForm.types.ts`, `ListingForm.tsx` (one numeric input `מספר חדרי שינה`, four amenity checkboxes `סלון` / `מיטות קומותיים` / `מזגן` / `כיריים גז`), and `owner/listings/[id]/page.tsx` initial-values mapping. Form prompt must say **bedrooms** (`חדרי שינה`), never **rooms** (`חדרים`).
 - [ ] Add alpha-aware color token helper. Currently several `rgb(... / opacity)` calls live in component SCSS (Pill `red-soft` tone; Input focus + invalid-focus rings; PublicNav greeting; HostelsPanel surface; listings-preview dark-context text; hero ghost-on-dark CTA override). Add a token helper or alpha map so these also flow through tokens.
 - [ ] Owner sidebar `BrandMark` could opt into `showMark` for consistency with the public surface, once we agree on the lockup convention everywhere.
 - [ ] `react-hooks/set-state-in-effect` is `eslint-disable`d on `PublicNavMobileMenu` for the App-Router pathname-close pattern. Revisit when React's `useEvent` (or a stable equivalent) lands.
@@ -70,7 +73,8 @@ _None._ CP-4c prereq credentials are pending Adir / Alon but don't block scoping
 - [ ] Corporate dashboard (KPIs, AI Import, Excel reports, role-based corporate permissions, bulk worker upload)
 - [ ] Yield calculator
 - [ ] Ratings & reviews
-- [ ] Tier-3 verification (paid on-site inspection)
+- [ ] **Verification system — all levels** (1 self-reported, 2 remote attestation, 3 paid on-site inspection). Schema column `listings.verification_level` exists but unused in MVP; `VerificationLevelBadge` primitive shipped but not rendered. See DECISIONS_LOG 2026-05-12.
+- [ ] **Fire-safety amenity** — add `listings.has_fire_safety boolean DEFAULT false` alongside existing amenities; surface as a filter on `/listings` and as a badge/pill on listing detail; Hebrew label "בטיחות אש (גלאי עשן + מטף)". Definition: property has smoke detector AND fire extinguisher. See DECISIONS_LOG 2026-05-12.
 - [ ] Virtual tours
 - [ ] Neema integration (OQ-15)
 - [ ] Premium listing tiers / featured placement

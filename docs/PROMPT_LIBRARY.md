@@ -5344,12 +5344,19 @@ CREATE TABLE public.listings (
   bed_count           smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 50),
   monthly_rent_per_bed integer NOT NULL CHECK (monthly_rent_per_bed > 0),  -- in ILS, no decimals
 
-  -- Amenities (extensible; add columns as we discover requirements)
+  -- Amenities (extensible; add columns as we discover requirements).
+  -- bedroom_count is the count of *bedrooms* (חדרי שינה), NOT rooms (חדרים).
+  -- See DECISIONS_LOG 2026-05-13 for the bedrooms-vs-rooms distinction.
   area_sqm            integer,
+  bedroom_count       smallint,
   bathroom_count      smallint,
   has_kitchen         boolean NOT NULL DEFAULT true,
+  has_living_room     boolean NOT NULL DEFAULT false,
   has_wifi            boolean NOT NULL DEFAULT false,
   has_parking         boolean NOT NULL DEFAULT false,
+  has_ac              boolean NOT NULL DEFAULT false,
+  has_gas_cooking     boolean NOT NULL DEFAULT false,
+  has_bunk_beds       boolean NOT NULL DEFAULT false,
 
   -- Audit
   created_at          timestamptz NOT NULL DEFAULT now(),
@@ -5857,10 +5864,15 @@ const EMPTY: ListingFormValues = {
   bed_count: 8,
   monthly_rent_per_bed: 1200,
   area_sqm: undefined,
+  bedroom_count: undefined,
   bathroom_count: undefined,
   has_kitchen: true,
+  has_living_room: false,
   has_wifi: false,
   has_parking: false,
+  has_ac: false,
+  has_gas_cooking: false,
+  has_bunk_beds: false,
 };
 
 export function ListingForm({ initial, listingId }: ListingFormProps) {
@@ -5960,13 +5972,24 @@ export function ListingForm({ initial, listingId }: ListingFormProps) {
           value={String(values.bathroom_count ?? '')}
           onChange={e => update('bathroom_count', e.target.value ? parseInt(e.target.value) : undefined)}
         />
+        {/* DECISIONS_LOG 2026-05-13: bedrooms (חדרי שינה), NOT rooms (חדרים). */}
+        <Input
+          type="number"
+          label="מספר חדרי שינה"
+          value={String(values.bedroom_count ?? '')}
+          onChange={e => update('bedroom_count', e.target.value ? parseInt(e.target.value) : undefined)}
+        />
       </div>
 
       <div className={styles.amenities}>
         <h3>מתקנים</h3>
         <label><input type="checkbox" checked={values.has_kitchen} onChange={e => update('has_kitchen', e.target.checked)} /> מטבח</label>
+        <label><input type="checkbox" checked={values.has_living_room} onChange={e => update('has_living_room', e.target.checked)} /> סלון</label>
         <label><input type="checkbox" checked={values.has_wifi} onChange={e => update('has_wifi', e.target.checked)} /> אינטרנט</label>
         <label><input type="checkbox" checked={values.has_parking} onChange={e => update('has_parking', e.target.checked)} /> חניה</label>
+        <label><input type="checkbox" checked={values.has_ac} onChange={e => update('has_ac', e.target.checked)} /> מזגן</label>
+        <label><input type="checkbox" checked={values.has_gas_cooking} onChange={e => update('has_gas_cooking', e.target.checked)} /> כיריים גז</label>
+        <label><input type="checkbox" checked={values.has_bunk_beds} onChange={e => update('has_bunk_beds', e.target.checked)} /> מיטות קומותיים</label>
       </div>
 
       <div className={styles.descGroup}>
@@ -6007,10 +6030,17 @@ export interface ListingFormValues {
   bed_count: number;
   monthly_rent_per_bed: number;
   area_sqm: number | undefined;
+  // bedroom_count is bedrooms (חדרי שינה), NOT rooms (חדרים).
+  // DECISIONS_LOG 2026-05-13.
+  bedroom_count: number | undefined;
   bathroom_count: number | undefined;
   has_kitchen: boolean;
+  has_living_room: boolean;
   has_wifi: boolean;
   has_parking: boolean;
+  has_ac: boolean;
+  has_gas_cooking: boolean;
+  has_bunk_beds: boolean;
 }
 
 export interface ListingFormProps {
@@ -6130,10 +6160,15 @@ export default async function EditListingPage({ params }: { params: Promise<{ id
             bed_count: data.bed_count,
             monthly_rent_per_bed: data.monthly_rent_per_bed,
             area_sqm: data.area_sqm ?? undefined,
+            bedroom_count: data.bedroom_count ?? undefined,
             bathroom_count: data.bathroom_count ?? undefined,
             has_kitchen: data.has_kitchen,
+            has_living_room: data.has_living_room,
             has_wifi: data.has_wifi,
             has_parking: data.has_parking,
+            has_ac: data.has_ac,
+            has_gas_cooking: data.has_gas_cooking,
+            has_bunk_beds: data.has_bunk_beds,
           }}
         />
       </div>
@@ -6313,7 +6348,7 @@ export default async function HomePage() {
             קבלני בנייה: מצאו דיור מאומת תוך 48 שעות.<br/>
             בעלי נכסים: הגדילו הכנסה ב-80%+ ממחיר שוק.
           </p>
-          <p className={styles.terms}>ללא עלות לקבלן · 5% עמלה מבעל הנכס · חשבונית מס</p>
+          <p className={styles.terms}>ללא עלות לקבלן · 3% עמלה מבעל הנכס · חשבונית מס</p>
           <div className={styles.heroActions}>
             <Link href="/listings"><Button variant="cta" size="lg">חפש נכס מתאים</Button></Link>
             <Link href="/sign-up"><Button variant="ghost" size="lg">פרסם נכס</Button></Link>
@@ -6348,7 +6383,7 @@ export default async function HomePage() {
       {/* STATS */}
       <section className={styles.statsSection}>
         <Stat icon="users" big="90,000" label="עובדים זרים בבנייה" />
-        <Stat icon="percent" big="5%" label="עמלה מבעל הנכס" />
+        <Stat icon="percent" big="3%" label="עמלה מבעל הנכס" />
         <Stat icon="clock" big="48h" label="זמן מענה מקסימלי" />
         <Stat icon="ruler" big='4 מ"ר' label="לעובד — חוקי" />
       </section>
@@ -6408,7 +6443,7 @@ export default async function HomePage() {
         <Faq q="האם הנכסים מאושרים על ידי הרשויות?" a="כל הנכסים מתפרסמים תחת הצהרת הבעלים. נכסים שעברו ביקורת מסמכים נושאים תג אימות." />
         <Faq q="כמה זמן לוקח למצוא נכס מתאים?" a="הזמן הממוצע משריון לחתימה הוא 3-5 ימי עסקים." />
         <Faq q="האם יש חוזה שכירות מסודר?" a="כן. אנחנו מספקים חוזה שכירות תקני שעובר חתימה דיגיטלית של שני הצדדים." />
-        <Faq q="מה עלות השירות?" a="לקבלן: ללא עלות. לבעל הנכס: 5% עמלה מסכום השכירות החודשית." />
+        <Faq q="מה עלות השירות?" a="לקבלן: ללא עלות. לבעל הנכס: 3% עמלה מסכום השכירות החודשית." />
       </section>
 
       {/* FOOTER */}
@@ -6702,7 +6737,7 @@ import { Button } from '@/components/primitives/Button/Button';
 import { Input } from '@/components/primitives/Input/Input';
 import { createBrowserClient } from '@/lib/supabase/browser';
 
-const OZ_COMMISSION_RATE = 0.05;  // 5% per existing brand language. Move to feature_flags or a config table in Phase 5 if it changes.
+const OZ_COMMISSION_RATE = 0.03;  // 3% per DECISIONS_LOG 2026-05-12. Move to feature_flags or a config table in Phase 5 if it changes again.
 
 interface Props {
   listing: {
@@ -6765,7 +6800,7 @@ export function BookingRequestForm({ listing }: Props) {
         <div>
           <p>חודשים: {months}</p>
           <p>שכירות: ₪{totalRent.toLocaleString('he-IL')}</p>
-          <p>עמלת עוז (5%): ₪{commission.toLocaleString('he-IL')}</p>
+          <p>עמלת עוז (3%): ₪{commission.toLocaleString('he-IL')}</p>
           <p><strong>סה״כ: ₪{total.toLocaleString('he-IL')}</strong></p>
         </div>
       ) : null}

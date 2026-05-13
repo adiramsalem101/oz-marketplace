@@ -174,7 +174,8 @@ The brand kit doesn't define a section-padding scale — these are ad-hoc per se
 - Card: white background, ~1px border `border-default` or no border + `shadow-sm`, ~12–16px (`radius-2xl` = 16px = canonical card)
 - Image area: aspect ratio ~3:2 (`16:10` per `04e`)
 - Image corner radius: matches card (top corners only if image is flush)
-- **Two image overlays:**
+- **Image overlay (MVP):** single pill on the top-end (left in RTL): vacancy pill — white bg, dark text, neutral border. The verification pill is **dropped from MVP** per DECISIONS_LOG 2026-05-12; the verification system (all levels) is deferred. The target two-overlay design (verification top-start + vacancy top-end) is preserved below for the future-roadmap pattern.
+- **Target image overlays (post-MVP, deferred):**
   - Top-start (right in RTL): verification pill
     - Tier-1 / "verified A" → green-deep on green-deep-soft (`#206A4F` text on `rgba(32,106,79,0.1)` bg, per `04d` brand-hover-pressed)
     - Tier-2 / "verified B" → likely amber per the live site (legacy uses amber; brand canonical pairing TBD)
@@ -189,18 +190,23 @@ The brand kit doesn't define a section-padding scale — these are ad-hoc per se
   6. Bed count + "פרטים ←" link (blue-deep, end-aligned)
 - Card hover: `shadow-sm` → `shadow-md`, optional `transform: translateY(-2px)`
 
-### Verification pill spec
+### Verification pill spec (post-MVP target — not shipped in MVP)
+
+> **Deferred 2026-05-12.** No verification pill ships in MVP — all three levels are out of scope. The table below is the target design for when the verification system is re-scoped.
+
 | Variant | Bg | Text | Source |
 |---|---|---|---|
 | Self-reported (level 1) | `gray-100 #F3F4F6` | `fg-muted #6B7280` | `Pill.types tone="gray"` |
-| Remote-verified (level 2) | `blue-deep-soft (~rgba(27,58,107,0.1))` | `blue-deep #1B3A6B` | `Pill tone="blue-deep"` (current) |
-| On-site verified (level 3 — deferred) | `green-deep-soft rgba(32,106,79,0.1)` | `green-deep #206A4F` | `Pill tone="green-deep"` |
+| Remote-verified (level 2) | `blue-deep-soft (~rgba(27,58,107,0.1))` | `blue-deep #1B3A6B` | `Pill tone="blue-deep"` |
+| On-site verified (level 3) | `green-deep-soft rgba(32,106,79,0.1)` | `green-deep #206A4F` | `Pill tone="green-deep"` |
 
-The legacy site shows green pills for "verified A" — this matches our level-3, but legacy lumps level-2/3 differently. We deliberately split the levels in the schema (`verification_level` smallint 1/2/3, with 3 deferred). MVP ships only levels 1 and 2.
+The legacy site shows green pills for "verified A" — this matches our level-3, but legacy lumps level-2/3 differently. We deliberately split the levels in the schema (`verification_level` smallint 1/2/3). MVP ships no verification levels surfaced — the column defaults to `1` but no badge renders.
 
 ### Carry-over for oz-marketplace
-- ✅ Keep: white card, 16:10 (or 4:3) image, two-pill overlay, price-as-anchor, RTL-end "details" link
+- ✅ Keep: white card, 16:10 (or 4:3) image, price-as-anchor, RTL-end "details" link
 - ✅ Keep: hover shadow lift
+- ✅ Keep (MVP): single vacancy pill overlay (top-end). Verification pill is deferred per DECISIONS_LOG 2026-05-12.
+- ❌ Drop: verification pill on image (deferred from MVP — all levels)
 - ❌ Drop: B2B/B2C tag pill on cards (we don't have a B2C product in MVP)
 - ⚠️ Decide: vacancy pill on top-end vs occupancy-percent in body — legacy shows both. Recommend body-only (less noise on the card).
 
@@ -361,7 +367,7 @@ The legacy site shows green pills for "verified A" — this matches our level-3,
 | Contact CTA strip | ✅ light gray | ❌ | **Drop**: footer + email handles this |
 | Dark navy footer | ✅ | ❌ (currently a thin gray strip) | **Add**: a proper navy footer is a small upgrade worth doing |
 | Pilot announcement banner | ✅ above nav | ❌ | **Drop until needed**, can re-add as a dismissible strip |
-| Public listings card | reconstructed | ✅ | **Keep**; tighten the verification-pill mapping to our 1/2/3 schema |
+| Public listings card | reconstructed | ✅ | **Keep**; drop verification pill (MVP scope re-lock 2026-05-12 — all verification levels deferred); vacancy pill stays |
 | Public listing detail page | unknown (client-rendered) | ✅ gallery + booking panel | **Keep current** |
 | Login page (chromeless centered card) | ✅ | ✅ | **Keep** |
 | Sign-up persona picker (two-step) | ❌ legacy is single form | ✅ two-step ghost-on-ghost | **Keep** — deliberate divergence |
@@ -372,7 +378,7 @@ The legacy site shows green pills for "verified A" — this matches our level-3,
 
 For clarity on what *not* to build into the public surface:
 - No 3D / virtual-tour previews on listing cards. Per BUILD_PLAN §3.F: deferred to Phase 9+.
-- No tier-3 (paid on-site) verification badge in MVP. The pill exists in the schema (`verification_level=3`) but no listings ship with it.
+- No verification badges of any level in MVP. The column `verification_level` exists in the schema (default `1`) but no listings render a badge. Per DECISIONS_LOG 2026-05-12, the full verification system — all three levels — is deferred.
 - No B2C / individual-owner cards or sections. Reserved enum value, no signup path.
 - No yield calculator section. No "What can you earn?" interactive math.
 - No reviews or ratings on listings.
