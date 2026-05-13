@@ -790,6 +790,9 @@ that detail never landed in oz-marketplace's active specs or copy.
 
 ## 2026-05-13 — MVP leasing model: full property only, binary availability
 
+> 🔄 **Amended same-day** (see "Leasing-model amendment: per-bed price display, full-property booking" entry below). The booking-model and binary-availability parts of this entry stand; the **pricing display** parts (column rename to `monthly_rent`, "/ מיטה" → "/ חודש" flip) are withdrawn. Price is displayed per-bed; the corp still pays for the whole apartment, total derived as `monthly_rent_per_bed × bed_count × months + 3%`.
+
+
 **Context:** The current schema and UI model bookings at the **bed**
 level — `listings.monthly_rent_per_bed`, `bookings.worker_count`,
 `bookings.monthly_rent_total = workers × per_bed × months`. The booking
@@ -900,6 +903,91 @@ once the marketplace has volume; it's the wrong starting position.
 - Matches actual buyer behavior in the gush-dan pilot scope.
 
 **Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — Leasing-model amendment: per-bed price display, full-property booking
+
+**Context:** The earlier 2026-05-13 entry "MVP leasing model: full property
+only, binary availability" renamed `listings.monthly_rent_per_bed` →
+`listings.monthly_rent` and flipped all price displays from "/מיטה" to
+"/ חודש". On same-day review, that overshoots: the **booking model** is
+correctly full-property only (no partial / per-bed booking, binary
+availability, no worker-count input), but **price display should remain
+per-bed**. Construction corporations evaluating apartments are used to
+seeing a per-bed price, and the per-bed unit is what makes properties
+comparable when bed counts differ. The total they actually pay is for
+the whole apartment — that's just a derived number, not the headline.
+
+**Decision:**
+
+- **Schema:** keep `listings.monthly_rent_per_bed integer NOT NULL CHECK
+  (monthly_rent_per_bed > 0)`. **Do not** rename to `monthly_rent`. The
+  earlier entry's RENAME COLUMN instruction is withdrawn.
+- **Listing form label:** revert to "מחיר למיטה / חודש (₪)". Field
+  name `monthly_rent_per_bed`.
+- **Price display:**
+  - Listing card price-anchor: `₪X,XXX / מיטה` (large, bold, blue-deep,
+    with "/ מיטה" as the muted suffix). Never the whole-property total
+    on the card.
+  - Marketplace card line: `{bed_count} מיטות · ₪{monthly_rent_per_bed} / מיטה`.
+  - Listing detail price-anchor: `₪X,XXX / מיטה / חודש`.
+  - Marketplace filter: "מחיר מקסימלי למיטה" (number input), filtered
+    via `monthly_rent_per_bed`.
+- **Booking model (unchanged from the original entry):** the booking
+  covers the **entire apartment** — there is no partial / per-bed
+  booking, no worker-count input. The corporation enters dates only.
+- **Booking math:** total payable =
+  `(monthly_rent_per_bed × bed_count × months) + 3% commission`.
+  The booking summary on the request form spells the multiplication
+  out so the corp sees what they're paying for:
+  - חודשים: N
+  - מחיר למיטה: ₪X × Y מיטות = ₪Z / חודש
+  - שכירות: ₪(Z × N)
+  - עמלת עוז (3%): ₪commission
+  - סה״כ: ₪total
+- **Booking row snapshot:** `bookings.monthly_rent_total` is the
+  derived `monthly_rent_per_bed × bed_count × months` (in agorot, no
+  decimals). `bookings.worker_count` is stamped from `listings.bed_count`
+  at request time (corp doesn't enter it; booking is whole-apartment).
+- **Availability (unchanged from the original entry):** binary `פנוי` /
+  `מושכר` per date range. No fractional vacancy.
+- **`bed_count` (unchanged):** stays as informational capacity AND now
+  also drives the visible per-bed → total math. The marketplace
+  "מינ׳ מיטות" filter still works.
+
+**Implications:**
+
+- The earlier entry's "schema implications" RENAME-COLUMN bullet is
+  withdrawn. The column keeps its original name.
+- The earlier entry's "UI implications" bullets that said price displays
+  drop "/ מיטה" are withdrawn; "/ מיטה" stays on cards/detail/filter.
+- `PROMPT_LIBRARY.md` is reverted to per-bed displays and the
+  BookingRequestForm spec now derives the total as per-bed × bed_count
+  × months.
+- `GLOSSARY.md` "Full-property lease" entry is amended to clarify the
+  display-vs-booking split.
+- The standardized HelloSign lease template uses both placeholders:
+  `{{monthly_rent_per_bed}}` (the listed per-bed price) and
+  `{{monthly_rent_total}}` (the per-bed × bed_count contractual
+  monthly rent). `{{bed_count}}` is the apartment capacity.
+
+**Rationale:**
+
+- Per-bed pricing is the genre convention for foreign-worker housing
+  in Israel. Construction corporations compare apartments by per-bed
+  cost across very different bed counts (a 6-bed 2-room and a 12-bed
+  4-room aren't comparable on whole-apartment price). Stripping per-bed
+  display would make the marketplace harder to scan, not easier.
+- The booking simplification (whole-apartment only, no worker-count
+  input, binary availability) is the part that mattered for cutting
+  scope — the price-display unit was incidental and got pulled along
+  by accident.
+
+**Status:** ✅ Locked. Supersedes only the pricing-display and column-
+name portions of the earlier 2026-05-13 leasing-model entry; the
+binary-availability and no-worker-count-input portions of that entry
+stand.
 
 ---
 

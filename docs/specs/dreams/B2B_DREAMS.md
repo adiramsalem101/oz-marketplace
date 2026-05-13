@@ -14,9 +14,9 @@
 
 **Schema sketch (when the work begins):**
 
-- `listings.monthly_rent` (whole-apartment rent, MVP) stays as the default. **Add** `listings.monthly_rent_per_bed integer` (nullable) so owners can opt in to per-bed pricing on a per-listing basis. If `monthly_rent_per_bed` is null, the listing is whole-apartment only. If both are set, the listing offers both models and the buyer chooses.
-- `listings.allow_partial_lease boolean NOT NULL DEFAULT false` to flag the listing as accepting partial bookings.
-- `bookings.worker_count smallint` — already exists, currently stamped from `listings.bed_count` per the MVP shape. In the dream, it becomes a real input: the corporation specifies how many beds it wants. Total = `worker_count × monthly_rent_per_bed × months + commission`.
+- MVP already keeps `listings.monthly_rent_per_bed` (per-bed price displayed everywhere; whole-apartment booking total derived as `monthly_rent_per_bed × bed_count × months`). The dream adds **partial bookings on top of the existing per-bed price** — no column rename needed; only an opt-in flag and a sub-listing allocation table.
+- `listings.allow_partial_lease boolean NOT NULL DEFAULT false` to flag the listing as accepting partial bookings. When `false`, the listing remains whole-apartment only (MVP behaviour).
+- `bookings.worker_count smallint` — already exists, currently stamped from `listings.bed_count` per the MVP shape (the booking covers the whole apartment, so worker count = bed count). In the dream, when `allow_partial_lease = true` and the corp opts into a partial booking, `worker_count` becomes a real corp-entered input. Total in that case = `worker_count × monthly_rent_per_bed × months + commission` (versus MVP's `bed_count × monthly_rent_per_bed × months + commission`).
 - New table `bed_holds` (or per-`booking` bed allocation): tracks which beds in a listing are held by which booking for which date range, so two corps don't double-book the same bed.
 - Availability stops being binary and becomes a fractional `available_beds / bed_count` derivation per date range, which the marketplace and listing-detail UI surface.
 

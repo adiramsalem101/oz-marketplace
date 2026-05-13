@@ -60,12 +60,14 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 ## Product concepts
 
 ### Full-property lease (MVP leasing model)
-**Definition:** In MVP, a booking covers the **entire apartment** for a contiguous date range. Pricing is per-apartment (`listings.monthly_rent`), not per bed. A construction corporation pays for the whole listing or nothing — there is no partial-apartment booking, no per-bed pricing, no two-corp coexistence in one unit.
-**Availability:** binary — a listing is either **available** (`פנוי`) or **leased** (`מושכר`) for the requested date range. Computed by checking whether any `bookings` row with `status IN ('confirmed', 'paid', 'accepted')` overlaps the range. No fractional `available_beds`, no "3 of 8 beds taken" display.
-**`bed_count` is informational only:** the listing form still asks how many beds the apartment has, and the marketplace filter still supports "מינ׳ מיטות" so corporations can size against their crew, but `bed_count` does not drive pricing or partial bookings.
-**Booking math:** `Total = monthly_rent × months + 3% commission` (commission per DECISIONS_LOG 2026-05-12).
-**Future (Dreams):** partial / per-bed / per-worker leasing — including multi-corp coexistence — moves to `docs/specs/dreams/B2B_DREAMS.md`. That direction is right once the marketplace has volume; it's the wrong starting position.
-**See:** DECISIONS_LOG 2026-05-13 "MVP leasing model: full property only, binary availability"
+**Definition:** In MVP, a booking covers the **entire apartment** for a contiguous date range. A construction corporation pays for the whole listing or nothing — there is no partial-apartment booking, no two-corp coexistence in one unit, no worker-count input on the booking form.
+**Price display — per bed.** The marketplace and listing detail surface the **per-bed monthly price** (`listings.monthly_rent_per_bed`), shown as "₪X / מיטה" on cards and "₪X / מיטה / חודש" on the detail page. The corporate booking form derives the whole-apartment total from `monthly_rent_per_bed × bed_count × months`. Per-bed is the unit corporations use to compare apartments with different bed counts; the total they pay is for the whole apartment.
+**Availability — binary.** A listing is either **available** (`פנוי`) or **leased** (`מושכר`) for the requested date range. Computed by checking whether any `bookings` row with `status IN ('confirmed', 'paid', 'accepted')` overlaps the range. No fractional `available_beds`, no "3 of 8 beds taken" display.
+**`bed_count` is informational AND load-bearing:** the listing form asks how many beds the apartment has; the marketplace filter "מינ׳ מיטות" filters on it; the booking total math multiplies by it. It does not drive partial bookings — the booking still covers the whole apartment.
+**Booking math:** `Total = (monthly_rent_per_bed × bed_count × months) + 3% commission` (commission per DECISIONS_LOG 2026-05-12).
+**Booking summary UI breakdown:** "חודשים: N · מחיר למיטה: ₪X × Y מיטות = ₪Z / חודש · שכירות: ₪(Z × N) · עמלת עוז (3%): ₪commission · סה״כ: ₪total".
+**Future (Dreams):** partial / per-bed / per-worker leasing — including multi-corp coexistence (one apartment, two corps) — moves to `docs/specs/dreams/B2B_DREAMS.md`. That direction is right once the marketplace has volume; it's the wrong starting position.
+**See:** DECISIONS_LOG 2026-05-13 "MVP leasing model: full property only, binary availability" (original entry) and "Leasing-model amendment: per-bed price display, full-property booking" (same-day amendment).
 
 ### Audit Pack (`תיק נכס`)
 **Status:** ⏸ **Deferred — not in MVP.** Lives on the corporate dashboard, which is itself post-MVP per BUILD_PLAN §3.F. Vocabulary and access rule are locked here so they don't drift when the feature ships.
@@ -223,3 +225,4 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 | 2026-05-13 | Added "Audit Pack (`תיק נכס`)" entry — locks canonical Hebrew translation and corporate-after-confirmed-booking access rule per DECISIONS_LOG 2026-05-13 | — |
 | 2026-05-13 | Clarified `תקנות עובדים זרים` 4 m² rule as per-bed-per-bedroom (never aggregate); locked canonical Hebrew long/short forms per DECISIONS_LOG 2026-05-13 | — |
 | 2026-05-13 | Added "Full-property lease (MVP leasing model)" entry — locks full-apartment-only leasing + binary availability per DECISIONS_LOG 2026-05-13 | — |
+| 2026-05-13 | Amended "Full-property lease" entry — price display stays per-bed; booking total derived as `monthly_rent_per_bed × bed_count × months` (same-day correction per DECISIONS_LOG 2026-05-13 amendment) | — |

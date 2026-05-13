@@ -3982,8 +3982,8 @@ Logged in `TASKS.md` Future-roadmap.
   commission, settles the rest to the owner-company on a manual
   operations cycle. (Pelecard split-payment to owner is `feature_flags`
   flagged off and is a future iteration.)
-- **Total amount = (monthly_rent × months) + OZ commission** (5% of
-  rent total). Snapshot stored on the booking row at request time.
+- **Total amount = (monthly_rent_per_bed × bed_count × months) + OZ commission** (3% of
+  rent total per DECISIONS_LOG 2026-05-12; the original 5% line below is superseded). Snapshot stored on the booking row at request time.
 
 ### Contract: HelloSign with standardized lease
 
@@ -5258,7 +5258,7 @@ Build the entire MVP product surface end-to-end. By the end of Phase 4, the foll
 5. Signs up as a `construction_corporation` → returns to listing detail
 6. Submits a booking request with date range (full apartment — see DECISIONS_LOG 2026-05-13 "MVP leasing model: full property only")
 7. **Owner-company** receives email notification, logs in, accepts the request from their bookings list
-8. **System generates a Pelecard Link b'Click** for `(monthly_rent × months) + OZ commission` and emails it to the corporation
+8. **System generates a Pelecard Link b'Click** for `(monthly_rent_per_bed × bed_count × months) + OZ commission` and emails it to the corporation
 9. Corporation pays through Pelecard checkout
 10. Webhook fires → booking moves to `paid`
 11. **System sends HelloSign signature request** to both parties with the standardized lease template, pre-filled with property and booking data
@@ -5343,12 +5343,13 @@ CREATE TABLE public.listings (
   street_number       text,
 
   -- Capacity & pricing.
-  -- DECISIONS_LOG 2026-05-13: MVP supports full-property leases only.
-  -- monthly_rent is the rent for the WHOLE apartment per month (not per bed).
-  -- bed_count is informational only — it drives marketplace filters
-  -- ("מינ׳ מיטות") but not pricing or partial bookings.
-  bed_count           smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 50),
-  monthly_rent        integer NOT NULL CHECK (monthly_rent > 0),  -- in ILS, no decimals
+  -- DECISIONS_LOG 2026-05-13 (amended same-day): MVP supports full-property
+  -- leases only, but PRICING IS DISPLAYED PER BED. The corporate booking
+  -- pays for the whole apartment — total = monthly_rent_per_bed × bed_count × months.
+  -- There is no partial-apartment booking; bed_count drives both the visible
+  -- per-bed price and the total math.
+  bed_count            smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 50),
+  monthly_rent_per_bed integer NOT NULL CHECK (monthly_rent_per_bed > 0),  -- in ILS, no decimals
 
   -- Amenities (extensible; add columns as we discover requirements).
   -- bedroom_count is the count of *bedrooms* (חדרי שינה), NOT rooms (חדרים).
@@ -5717,7 +5718,7 @@ export default async function MyListingsPage() {
   const supabase = await createServerClient();
   const { data: listings } = await supabase
     .from('listings')
-    .select('id, title, city, status, bed_count, monthly_rent, verification_level, created_at')
+    .select('id, title, city, status, bed_count, monthly_rent_per_bed, verification_level, created_at')
     .order('created_at', { ascending: false });
 
   return (
@@ -5750,7 +5751,7 @@ export default async function MyListingsPage() {
                   <th>שם</th>
                   <th>עיר</th>
                   <th>מיטות</th>
-                  <th>שכירות חודשית</th>
+                  <th>מחיר למיטה</th>
                   <th>סטטוס</th>
                   <th>אימות</th>
                   <th></th>
@@ -5762,7 +5763,7 @@ export default async function MyListingsPage() {
                     <td>{l.title}</td>
                     <td>{l.city}</td>
                     <td>{l.bed_count}</td>
-                    <td>₪{l.monthly_rent.toLocaleString('he-IL')}</td>
+                    <td>₪{l.monthly_rent_per_bed.toLocaleString('he-IL')}</td>
                     <td><StatusPill status={l.status} /></td>
                     <td><VerificationPill level={l.verification_level} /></td>
                     <td>
@@ -5868,7 +5869,7 @@ const EMPTY: ListingFormValues = {
   street: '',
   street_number: '',
   bed_count: 8,
-  monthly_rent: 1200,
+  monthly_rent_per_bed: 1200,
   area_sqm: undefined,
   bedroom_count: undefined,
   bathroom_count: undefined,
@@ -5962,9 +5963,9 @@ export function ListingForm({ initial, listingId }: ListingFormProps) {
         />
         <Input
           type="number"
-          label="שכירות חודשית לדירה (₪)"
-          value={String(values.monthly_rent)}
-          onChange={e => update('monthly_rent', parseInt(e.target.value) || 0)}
+          label="מחיר למיטה / חודש (₪)"
+          value={String(values.monthly_rent_per_bed)}
+          onChange={e => update('monthly_rent_per_bed', parseInt(e.target.value) || 0)}
         />
         <Input
           type="number"
@@ -6034,7 +6035,7 @@ export interface ListingFormValues {
   street: string | null;
   street_number: string | null;
   bed_count: number;
-  monthly_rent: number;
+  monthly_rent_per_bed: number;
   area_sqm: number | undefined;
   // bedroom_count is bedrooms (חדרי שינה), NOT rooms (חדרים).
   // DECISIONS_LOG 2026-05-13.
@@ -6164,7 +6165,7 @@ export default async function EditListingPage({ params }: { params: Promise<{ id
             street: data.street,
             street_number: data.street_number,
             bed_count: data.bed_count,
-            monthly_rent: data.monthly_rent,
+            monthly_rent_per_bed: data.monthly_rent_per_bed,
             area_sqm: data.area_sqm ?? undefined,
             bedroom_count: data.bedroom_count ?? undefined,
             bathroom_count: data.bathroom_count ?? undefined,
@@ -6338,7 +6339,7 @@ export default async function HomePage() {
   const supabase = await createServerClient();
   const { data: previewListings } = await supabase
     .from('listings')
-    .select('id, title, city, bed_count, monthly_rent, verification_level')
+    .select('id, title, city, bed_count, monthly_rent_per_bed, verification_level')
     .eq('status', 'published')
     .order('published_at', { ascending: false })
     .limit(6);
@@ -6404,7 +6405,7 @@ export default async function HomePage() {
                 <div className={styles.previewBody}>
                   <h3>{l.title}</h3>
                   <p>📍 {l.city}</p>
-                  <p>{l.bed_count} מיטות · ₪{l.monthly_rent.toLocaleString('he-IL')} / חודש</p>
+                  <p>{l.bed_count} מיטות · ₪{l.monthly_rent_per_bed.toLocaleString('he-IL')} / מיטה</p>
                 </div>
               </Link>
             ))}
@@ -6592,13 +6593,13 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
 
   let q = supabase
     .from('listings')
-    .select('id, title, city, bed_count, monthly_rent, verification_level, area_sqm')
+    .select('id, title, city, bed_count, monthly_rent_per_bed, verification_level, area_sqm')
     .eq('status', 'published')
     .order('published_at', { ascending: false });
 
   if (params.city) q = q.eq('city', params.city);
   if (params.minBeds) q = q.gte('bed_count', parseInt(params.minBeds));
-  if (params.maxRent) q = q.lte('monthly_rent', parseInt(params.maxRent));
+  if (params.maxRent) q = q.lte('monthly_rent_per_bed', parseInt(params.maxRent));
 
   const { data: listings } = await q;
 
@@ -6622,7 +6623,7 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
                   <span>{l.bed_count} מיטות</span>
                   {l.area_sqm ? <span>{l.area_sqm} מ״ר</span> : null}
                 </div>
-                <p className={styles.price}>₪{l.monthly_rent.toLocaleString('he-IL')}<span> / חודש</span></p>
+                <p className={styles.price}>₪{l.monthly_rent_per_bed.toLocaleString('he-IL')}<span> / מיטה</span></p>
                 <VerificationPill level={l.verification_level} />
               </div>
             </Card>
@@ -6647,7 +6648,7 @@ function ListingFilters({ initial }: { initial: Record<string, string> }) {
     <form className={styles.filters} method="get">
       <input name="city" placeholder="עיר" defaultValue={initial.city} />
       <input name="minBeds" type="number" placeholder="מינ׳ מיטות" defaultValue={initial.minBeds} />
-      <input name="maxRent" type="number" placeholder="שכירות מקסימלית לחודש" defaultValue={initial.maxRent} />
+      <input name="maxRent" type="number" placeholder="מחיר מקסימלי למיטה" defaultValue={initial.maxRent} />
       <button type="submit">חפש</button>
     </form>
   );
@@ -6706,7 +6707,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             {listing.has_wifi ? <li>אינטרנט</li> : null}
             {listing.has_parking ? <li>חניה</li> : null}
           </ul>
-          <p className={styles.price}>₪{listing.monthly_rent.toLocaleString('he-IL')}<span> / חודש</span></p>
+          <p className={styles.price}>₪{listing.monthly_rent_per_bed.toLocaleString('he-IL')}<span> / מיטה / חודש</span></p>
           {listing.description ? <p>{listing.description}</p> : null}
         </Card>
 
@@ -6745,15 +6746,17 @@ import { createBrowserClient } from '@/lib/supabase/browser';
 
 const OZ_COMMISSION_RATE = 0.03;  // 3% per DECISIONS_LOG 2026-05-12. Move to feature_flags or a config table in Phase 5 if it changes again.
 
-// DECISIONS_LOG 2026-05-13: MVP is full-property leases only.
-// A booking covers the entire listing for the date range.
-// No "number of workers" input — pricing doesn't depend on it.
+// DECISIONS_LOG 2026-05-13 (amended same-day): MVP is full-property leases
+// only — the corporation pays for the WHOLE apartment, not partial. But the
+// price is displayed PER BED (`/ מיטה`), and the total is derived as
+// monthly_rent_per_bed × bed_count × months + 3% commission. No "number of
+// workers" input — bed_count drives the math.
 
 interface Props {
   listing: {
     id: string;
     owner_id: string;
-    monthly_rent: number;
+    monthly_rent_per_bed: number;
     bed_count: number;
   };
 }
@@ -6768,7 +6771,8 @@ export function BookingRequestForm({ listing }: Props) {
   const [error, setError] = useState<string | null>(null);
 
   const months = monthsBetween(start, end);
-  const totalRent = listing.monthly_rent * months;
+  const monthlyRentForProperty = listing.monthly_rent_per_bed * listing.bed_count;
+  const totalRent = monthlyRentForProperty * months;
   const commission = Math.round(totalRent * OZ_COMMISSION_RATE);
   const total = totalRent + commission;
 
@@ -6785,8 +6789,8 @@ export function BookingRequestForm({ listing }: Props) {
       start_date: start,
       end_date: end,
       // worker_count column kept in schema (IRON_RULE 3 — don't drop) but
-      // not driven by the UI; stamp listing.bed_count as a default so the
-      // column stays NOT NULL-compatible without forcing a destructive migration.
+      // not driven by the UI; stamp listing.bed_count since the booking
+      // covers the whole apartment.
       worker_count: listing.bed_count,
       monthly_rent_total: totalRent,
       oz_commission: commission,
@@ -6802,7 +6806,7 @@ export function BookingRequestForm({ listing }: Props) {
   return (
     <div>
       <h3>בקשת שריון</h3>
-      <p className="muted">שכירות לדירה השלמה — תאריכים בלבד.</p>
+      <p className="muted">שריון הדירה השלמה ({listing.bed_count} מיטות) — בחר תאריכים.</p>
       <Input type="date" label="תאריך התחלה" value={start} onChange={e => setStart(e.target.value)} />
       <Input type="date" label="תאריך סיום" value={end} onChange={e => setEnd(e.target.value)} />
       <textarea placeholder="הודעה לבעל הנכס (אופציונלי)" value={message} onChange={e => setMessage(e.target.value)} />
@@ -6810,6 +6814,7 @@ export function BookingRequestForm({ listing }: Props) {
       {months > 0 ? (
         <div>
           <p>חודשים: {months}</p>
+          <p>מחיר למיטה: ₪{listing.monthly_rent_per_bed.toLocaleString('he-IL')} × {listing.bed_count} מיטות = ₪{monthlyRentForProperty.toLocaleString('he-IL')} / חודש</p>
           <p>שכירות: ₪{totalRent.toLocaleString('he-IL')}</p>
           <p>עמלת עוז (3%): ₪{commission.toLocaleString('he-IL')}</p>
           <p><strong>סה״כ: ₪{total.toLocaleString('he-IL')}</strong></p>
@@ -6891,7 +6896,7 @@ This checkpoint integrates two third-party services and wires the full booking s
 
 5. **Booking status transitions** — server actions that enforce valid state machine: `requested → accepted | rejected`; `accepted → paid` (via Pelecard webhook only); `paid → confirmed` (via HelloSign webhook only); cancellation possible from any pre-paid state.
 
-6. **Standardized lease template** — Hebrew RTL Word/PDF template stored in `templates/lease.docx`, with placeholders for `{{owner_name}}`, `{{corporation_name}}`, `{{property_address}}`, `{{start_date}}`, `{{end_date}}`, `{{monthly_rent}}` (rent for the whole apartment per DECISIONS_LOG 2026-05-13), `{{worker_count}}` (capacity, sourced from `listings.bed_count` since the corp doesn't enter it), etc. HelloSign fills these from booking + listing data.
+6. **Standardized lease template** — Hebrew RTL Word/PDF template stored in `templates/lease.docx`, with placeholders for `{{owner_name}}`, `{{corporation_name}}`, `{{property_address}}`, `{{start_date}}`, `{{end_date}}`, `{{monthly_rent_per_bed}}` (per-bed price as listed), `{{bed_count}}` (apartment capacity), `{{monthly_rent_total}}` (per-bed × bed_count — the contractual monthly rent for the whole apartment per DECISIONS_LOG 2026-05-13), `{{worker_count}}` (capacity, sourced from `listings.bed_count` since the corp doesn't enter it), etc. HelloSign fills these from booking + listing data.
 
 ### Required environment values for CP-4c
 
