@@ -5365,15 +5365,16 @@ CREATE TABLE public.listings (
   bedroom_count       smallint,                                     -- = COUNT(listing_bedrooms)
   bathroom_count      smallint,
 
-  -- Optional facilities — canonical 7-item list locked by
-  -- DECISIONS_LOG 2026-05-13 "Listing optional facilities: canonical 7-item list".
-  -- Earlier locks for has_living_room and has_gas_cooking are SUPERSEDED;
-  -- those columns are not part of the canonical schema.
+  -- Optional facilities — canonical 9-item list locked by DECISIONS_LOG
+  -- 2026-05-13 "Listing optional facilities: expanded to 9 items".
+  -- All default false — every facility is opt-in.
   has_ac              boolean NOT NULL DEFAULT false,  -- מזגן
   has_wifi            boolean NOT NULL DEFAULT false,  -- אינטרנט
   has_furniture       boolean NOT NULL DEFAULT false,  -- ריהוט
   has_parking         boolean NOT NULL DEFAULT false,  -- חניה
-  has_kitchen         boolean NOT NULL DEFAULT false,  -- מטבח (default flipped to false; opt-in like other facilities)
+  has_kitchen         boolean NOT NULL DEFAULT false,  -- מטבח
+  has_gas_cooking     boolean NOT NULL DEFAULT false,  -- כיריים גז
+  has_living_room     boolean NOT NULL DEFAULT false,  -- סלון
   has_terrace_yard    boolean NOT NULL DEFAULT false,  -- מרפסת / חצר (single boolean covering either)
   has_washing_machine boolean NOT NULL DEFAULT false,  -- מכונת כביסה
 

@@ -1224,6 +1224,8 @@ bedrooms-vs-rooms terminology lock in that entry stand.
 
 ## 2026-05-13 — Listing optional facilities: canonical 7-item list
 
+> 🔄 **Amended same-day** — see "Listing optional facilities: expanded to 9 items (adds has_living_room + has_gas_cooking back)" below. The list is now **9 items**, not 7. The structure, defaults, and bunk-beds clarification in this entry stand; only the *count of items* and the "dropped from earlier locks" portion are superseded.
+
 **Context:** Earlier 2026-05-13 entries accumulated an amenity set
 piecemeal — `has_kitchen`, `has_wifi`, `has_parking` from the initial
 schema, then `has_living_room`, `has_bunk_beds`, `has_ac`,
@@ -1313,6 +1315,77 @@ are no longer the canonical set. `has_bunk_beds` survives as a
 separate (non-facilities) property-level boolean; `has_ac` survives
 in the new facilities list; `has_living_room` and `has_gas_cooking`
 are removed.
+
+---
+
+## 2026-05-13 — Listing optional facilities: expanded to 9 items (adds has_living_room + has_gas_cooking back)
+
+**Context:** Same-day review of the "canonical 7-item list" entry above
+flagged that `has_living_room` and `has_gas_cooking` shouldn't have
+been dropped — both carry real signal for the buyer and have a
+reasonable yes/no answer per property. Re-add them.
+
+**Decision:** the canonical optional-facilities list is **9 items**:
+
+| # | Column | Hebrew label |
+|---|---|---|
+| 1 | `has_ac` | מזגן |
+| 2 | `has_wifi` | אינטרנט |
+| 3 | `has_furniture` | ריהוט |
+| 4 | `has_parking` | חניה |
+| 5 | `has_kitchen` | מטבח |
+| 6 | `has_gas_cooking` | כיריים גז |
+| 7 | `has_living_room` | סלון |
+| 8 | `has_terrace_yard` | מרפסת / חצר |
+| 9 | `has_washing_machine` | מכונת כביסה |
+
+Ordering groups kitchen + kitchen-related (gas) and places living
+spaces (kitchen, gas, living_room, terrace/yard) together; the
+ordering above is a suggested grouping, not a hard ordering contract.
+
+**Defaults:** all nine are `boolean NOT NULL DEFAULT false`. Owners
+explicitly tick what their apartment offers. The earlier "kitchen
+default = true" pre-tick is dropped — opt-in everywhere.
+
+**Standing rules from the prior entry (unchanged):**
+
+- `has_bunk_beds` (`מיטות קומותיים`) remains a property-level boolean
+  but **outside** the facilities group — it's a bed-configuration
+  question, not a facility/services one.
+- Per-bedroom variants of any facility (e.g., AC per bedroom) are
+  not in MVP; everything is property-level.
+- The facilities set is extensible — additions go through a new
+  DECISIONS_LOG entry, not silent column additions.
+
+**Schema implications:**
+
+- `listings` keeps **all nine** facility columns + `has_bunk_beds`.
+  Specifically: `has_ac`, `has_wifi`, `has_furniture`, `has_parking`,
+  `has_kitchen`, `has_gas_cooking`, `has_living_room`,
+  `has_terrace_yard`, `has_washing_machine`, plus `has_bunk_beds`.
+- No columns get dropped from prior locked schemas.
+- The "drop has_living_room / drop has_gas_cooking" instructions in
+  the previous "canonical 7-item" entry are withdrawn.
+
+**Rationale:**
+
+- A living room is a meaningful distinction for crew housing — some
+  apartments are bedroom-only / studio-style and the corp wants to
+  know upfront.
+- Gas cooking is a regulatory + safety concern for some buyers; a
+  yes/no boolean is cheaper to capture than burying it in the
+  description. (Some apartments are induction-only; this lets the
+  owner clarify.)
+- The earlier "they live in the description field" rationale
+  underweighted how structured filters help corporations scan the
+  marketplace.
+
+**Status:** ✅ Locked. Supersedes only the "list is 7 items" and
+"has_living_room / has_gas_cooking dropped" portions of the
+preceding "Listing optional facilities: canonical 7-item list"
+entry; the bunk-beds clarification, the "all opt-in / default false"
+default policy, and the bedrooms-vs-rooms separation in that entry
+stand.
 
 ---
 
