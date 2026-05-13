@@ -991,4 +991,113 @@ stand.
 
 ---
 
+## 2026-05-13 — Booking form inputs: start_date + duration_months (no end date, no message)
+
+**Context:** Earlier 2026-05-13 entries pinned the booking model
+(full-apartment only, no worker-count input, binary availability) but
+left the form fields as "start date + end date + optional message" by
+inheritance from the legacy shape. Construction corporations think in
+"how many months", not "what's the exit date" — and the optional
+message field generates noise without unblocking anything. Lock the
+final field shape here.
+
+**Decision:** the corporate booking request form asks for **two inputs
+only**:
+
+1. **תאריך התחלה** (`start_date`) — the lease start date.
+2. **משך השכירות (חודשים)** (`duration_months`) — an integer **1–12**.
+   Sub-monthly leases aren't a thing; > 12 months goes through the
+   future renewal flow (post-MVP), not a single mega-booking.
+
+There is no end-date input, and no message / "הודעה לבעל הנכס" input.
+
+**Schema implications:**
+
+- Add `bookings.duration_months smallint NOT NULL CHECK (duration_months BETWEEN 1 AND 12)`.
+- Keep `bookings.end_date date NOT NULL CHECK (end_date > start_date)`.
+  The server computes it from `start_date + (duration_months || ' months')::interval`
+  on booking insert/update so the availability-overlap query
+  (`status IN ('confirmed','paid','accepted') AND start_date < requested_end AND end_date > requested_start`)
+  keeps working without schema gymnastics. Don't make `end_date` a
+  generated column — keep it a regular column populated server-side
+  to avoid PG generated-column edge cases.
+- `bookings.request_message text` column stays in the schema (IRON_RULE
+  3 — no destructive drops on the path to MVP) but is never populated
+  from the UI. Same pattern as `worker_count`, which is stamped from
+  `listings.bed_count` server-side.
+
+**UI / form implications:**
+
+- Two inputs: start date (date input) and duration (integer 1–12 — UX
+  control choice left to design: number stepper, dropdown, or chip
+  group, all acceptable). Drop the end-date input. Drop the message
+  textarea.
+- Submit is disabled until `start_date` is set, `duration_months` is
+  between 1 and 12 inclusive, and the listing is `פנוי` for the
+  derived range.
+- The booking summary breakdown uses `duration_months` directly as
+  the `N` in the months row: "חודשים: N · מחיר למיטה: ₪X × Y מיטות
+  = ₪Z / חודש · שכירות: ₪(Z × N) · עמלת עוז (3%): ₪commission ·
+  סה״כ: ₪total". No change to the per-bed × bed_count derivation.
+- Availability pill on the listing detail page recomputes against the
+  derived `end_date` (`start_date + duration_months`) as soon as both
+  inputs are valid.
+
+**Server-side flow on submit:**
+
+```ts
+const end_date = addMonths(start_date, duration_months); // server util
+const monthly_rent_total = listing.monthly_rent_per_bed * listing.bed_count * duration_months;
+const oz_commission = Math.round(monthly_rent_total * 0.03);
+await supabase.from('bookings').insert({
+  listing_id, corporation_id, owner_id,
+  start_date,
+  duration_months,
+  end_date,
+  worker_count: listing.bed_count, // stamped, unchanged
+  monthly_rent_total,
+  oz_commission,
+  total_amount: monthly_rent_total + oz_commission,
+});
+```
+
+The insert happens in a server action (not a browser-side
+`supabase.from(...).insert()` call) so the corp can't tamper with
+`end_date` or the totals — they're derived from the listing and the
+locked commission rate.
+
+**Marketplace filter implications:**
+
+- The marketplace filter bar can optionally surface a `duration_months`
+  filter (1–12) alongside `start_date` so the availability pill
+  recomputes against the derived range. Optional, not required for
+  MVP.
+
+**HelloSign lease template implications:**
+
+- The template uses `{{start_date}}`, `{{end_date}}`, and now also
+  `{{duration_months}}` if the lease prose wants to read "תקופת
+  שכירות של N חודשים" rather than "מ-X עד Y". Both placeholders
+  populate from the same booking row.
+
+**Rationale:**
+
+- A "how many months" prompt matches how corporations actually plan
+  crew rotations (cycles of 3, 6, 9, 12 months) — they pick a duration
+  off a familiar list, not an arbitrary end date.
+- Forcing duration ∈ [1, 12] keeps each booking a single lease
+  contract under the standardized 12-month HelloSign template. Beyond
+  12 months is a renewal, not a single longer booking.
+- Dropping the message field removes one optional input that
+  generates more support work than business value (corps either send
+  out-of-band emails or fill in basics during HelloSign signing).
+- Server-computed `end_date` keeps the availability query simple and
+  the schema stable.
+
+**Status:** ✅ Locked. Replaces the "start_date + end_date + optional
+message" form shape implied by the earlier 2026-05-13 leasing-model
+entries.
+
+---
+
 **End of decisions log. Append new entries below this line.**

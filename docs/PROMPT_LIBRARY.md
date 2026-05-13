@@ -5256,7 +5256,7 @@ Build the entire MVP product surface end-to-end. By the end of Phase 4, the foll
 3. Filters by city, capacity, price → clicks a listing → arrives at `/listings/[id]`
 4. Wants to book → clicks **"בקשו לשריין"** → prompted to sign in or sign up
 5. Signs up as a `construction_corporation` → returns to listing detail
-6. Submits a booking request with date range (full apartment — see DECISIONS_LOG 2026-05-13 "MVP leasing model: full property only")
+6. Submits a booking request with start date + duration in months (1–12); full apartment — see DECISIONS_LOG 2026-05-13 "MVP leasing model: full property only" and "Booking form inputs: start_date + duration_months"
 7. **Owner-company** receives email notification, logs in, accepts the request from their bookings list
 8. **System generates a Pelecard Link b'Click** for `(monthly_rent_per_bed × bed_count × months) + OZ commission` and emails it to the corporation
 9. Corporation pays through Pelecard checkout
@@ -6239,6 +6239,12 @@ CREATE TABLE public.bookings (
 
   status              public.booking_status NOT NULL DEFAULT 'requested',
   start_date          date NOT NULL,
+  -- duration_months is what the corporate user actually picks on the booking
+  -- form (1–12). end_date is server-derived as start_date + duration_months
+  -- so the availability-overlap query keeps working without a generated
+  -- column. See DECISIONS_LOG 2026-05-13 "Booking form inputs: start_date +
+  -- duration_months".
+  duration_months     smallint NOT NULL CHECK (duration_months BETWEEN 1 AND 12),
   end_date            date NOT NULL CHECK (end_date > start_date),
   worker_count        smallint NOT NULL CHECK (worker_count >= 1),
 
@@ -6256,7 +6262,10 @@ CREATE TABLE public.bookings (
   hellosign_request_id     text,
   contract_signed_at       timestamptz,
 
-  -- Notes from corporation when requesting
+  -- Notes from corporation when requesting.
+  -- Column kept in schema (IRON_RULE 3 — no destructive drops on the path
+  -- to MVP) but the booking form no longer asks for a message per
+  -- DECISIONS_LOG 2026-05-13. Stays NULL on inserts from the MVP UI.
   request_message     text,
 
   created_at          timestamptz NOT NULL DEFAULT now(),
@@ -6746,11 +6755,13 @@ import { createBrowserClient } from '@/lib/supabase/browser';
 
 const OZ_COMMISSION_RATE = 0.03;  // 3% per DECISIONS_LOG 2026-05-12. Move to feature_flags or a config table in Phase 5 if it changes again.
 
-// DECISIONS_LOG 2026-05-13 (amended same-day): MVP is full-property leases
-// only — the corporation pays for the WHOLE apartment, not partial. But the
-// price is displayed PER BED (`/ מיטה`), and the total is derived as
-// monthly_rent_per_bed × bed_count × months + 3% commission. No "number of
-// workers" input — bed_count drives the math.
+// DECISIONS_LOG 2026-05-13: MVP is full-property leases only — the
+// corporation pays for the WHOLE apartment. Price is displayed PER BED
+// (`/ מיטה`); total derives as monthly_rent_per_bed × bed_count ×
+// duration_months + 3% commission. No worker-count input. The form takes
+// TWO inputs only — start_date + duration_months (1–12). end_date is
+// server-computed; no message input. The insert runs in a server action
+// so the corp can't tamper with end_date or the totals.
 
 interface Props {
   listing: {
@@ -6762,58 +6773,51 @@ interface Props {
 }
 
 export function BookingRequestForm({ listing }: Props) {
-  const supabase = createBrowserClient();
   const router = useRouter();
   const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [message, setMessage] = useState('');
+  const [duration, setDuration] = useState<number>(1); // months, 1–12
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const months = monthsBetween(start, end);
+  const valid = !!start && duration >= 1 && duration <= 12;
   const monthlyRentForProperty = listing.monthly_rent_per_bed * listing.bed_count;
-  const totalRent = monthlyRentForProperty * months;
+  const totalRent = monthlyRentForProperty * duration;
   const commission = Math.round(totalRent * OZ_COMMISSION_RATE);
   const total = totalRent + commission;
 
   async function submit() {
     setError(null);
     setBusy(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError('יש להתחבר מחדש'); setBusy(false); return; }
-
-    const { data, error: e } = await supabase.from('bookings').insert({
+    // Server action — see app/actions/createBooking.ts. Computes end_date,
+    // worker_count, monthly_rent_total, oz_commission, total_amount server-
+    // side so the corp can't tamper with derived values.
+    const result = await createBookingAction({
       listing_id: listing.id,
-      corporation_id: user.id,
-      owner_id: listing.owner_id,
       start_date: start,
-      end_date: end,
-      // worker_count column kept in schema (IRON_RULE 3 — don't drop) but
-      // not driven by the UI; stamp listing.bed_count since the booking
-      // covers the whole apartment.
-      worker_count: listing.bed_count,
-      monthly_rent_total: totalRent,
-      oz_commission: commission,
-      total_amount: total,
-      request_message: message || null,
-    }).select().single();
+      duration_months: duration,
+    });
 
-    if (e) { setError(e.message); setBusy(false); return; }
-
+    if (!result.ok) { setError(result.error); setBusy(false); return; }
     router.push('/bookings/corporation');
   }
 
   return (
     <div>
       <h3>בקשת שריון</h3>
-      <p className="muted">שריון הדירה השלמה ({listing.bed_count} מיטות) — בחר תאריכים.</p>
+      <p className="muted">שריון הדירה השלמה ({listing.bed_count} מיטות) — בחר תאריך התחלה ומשך השכירות.</p>
       <Input type="date" label="תאריך התחלה" value={start} onChange={e => setStart(e.target.value)} />
-      <Input type="date" label="תאריך סיום" value={end} onChange={e => setEnd(e.target.value)} />
-      <textarea placeholder="הודעה לבעל הנכס (אופציונלי)" value={message} onChange={e => setMessage(e.target.value)} />
+      <Input
+        type="number"
+        label="משך השכירות (חודשים)"
+        min={1}
+        max={12}
+        value={String(duration)}
+        onChange={e => setDuration(Math.max(1, Math.min(12, parseInt(e.target.value) || 1)))}
+      />
 
-      {months > 0 ? (
+      {valid ? (
         <div>
-          <p>חודשים: {months}</p>
+          <p>חודשים: {duration}</p>
           <p>מחיר למיטה: ₪{listing.monthly_rent_per_bed.toLocaleString('he-IL')} × {listing.bed_count} מיטות = ₪{monthlyRentForProperty.toLocaleString('he-IL')} / חודש</p>
           <p>שכירות: ₪{totalRent.toLocaleString('he-IL')}</p>
           <p>עמלת עוז (3%): ₪{commission.toLocaleString('he-IL')}</p>
@@ -6823,20 +6827,52 @@ export function BookingRequestForm({ listing }: Props) {
 
       {error ? <p className="error">{error}</p> : null}
 
-      <Button variant="cta" onClick={submit} disabled={busy || !start || !end || months <= 0}>
+      <Button variant="cta" onClick={submit} disabled={busy || !valid}>
         {busy ? 'שולח…' : 'שלח בקשה'}
       </Button>
     </div>
   );
 }
 
-function monthsBetween(start: string, end: string): number {
-  if (!start || !end) return 0;
-  const s = new Date(start);
-  const e = new Date(end);
-  const days = (e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24);
-  return Math.ceil(days / 30);
-}
+// createBookingAction (server action — sketch):
+// "use server";
+// import { addMonths, formatISO } from 'date-fns';
+// import { createServerActionClient } from '@/lib/supabase/server';
+//
+// export async function createBookingAction(input: {
+//   listing_id: string; start_date: string; duration_months: number;
+// }) {
+//   if (input.duration_months < 1 || input.duration_months > 12)
+//     return { ok: false, error: 'משך השכירות חייב להיות בין 1 ל-12 חודשים' };
+//
+//   const supabase = await createServerActionClient();
+//   const { data: { user } } = await supabase.auth.getUser();
+//   if (!user) return { ok: false, error: 'יש להתחבר מחדש' };
+//
+//   const { data: listing } = await supabase
+//     .from('listings')
+//     .select('owner_id, monthly_rent_per_bed, bed_count')
+//     .eq('id', input.listing_id).single();
+//   if (!listing) return { ok: false, error: 'הנכס לא נמצא' };
+//
+//   const end_date = formatISO(addMonths(new Date(input.start_date), input.duration_months), { representation: 'date' });
+//   const monthly_rent_total = listing.monthly_rent_per_bed * listing.bed_count * input.duration_months;
+//   const oz_commission = Math.round(monthly_rent_total * 0.03);
+//
+//   const { error } = await supabase.from('bookings').insert({
+//     listing_id: input.listing_id,
+//     corporation_id: user.id,
+//     owner_id: listing.owner_id,
+//     start_date: input.start_date,
+//     duration_months: input.duration_months,
+//     end_date,
+//     worker_count: listing.bed_count, // stamped; booking covers the whole apartment
+//     monthly_rent_total,
+//     oz_commission,
+//     total_amount: monthly_rent_total + oz_commission,
+//   });
+//   return error ? { ok: false, error: error.message } : { ok: true };
+// }
 ```
 
 ### Step 6 — Bookings list views
@@ -6896,7 +6932,7 @@ This checkpoint integrates two third-party services and wires the full booking s
 
 5. **Booking status transitions** — server actions that enforce valid state machine: `requested → accepted | rejected`; `accepted → paid` (via Pelecard webhook only); `paid → confirmed` (via HelloSign webhook only); cancellation possible from any pre-paid state.
 
-6. **Standardized lease template** — Hebrew RTL Word/PDF template stored in `templates/lease.docx`, with placeholders for `{{owner_name}}`, `{{corporation_name}}`, `{{property_address}}`, `{{start_date}}`, `{{end_date}}`, `{{monthly_rent_per_bed}}` (per-bed price as listed), `{{bed_count}}` (apartment capacity), `{{monthly_rent_total}}` (per-bed × bed_count — the contractual monthly rent for the whole apartment per DECISIONS_LOG 2026-05-13), `{{worker_count}}` (capacity, sourced from `listings.bed_count` since the corp doesn't enter it), etc. HelloSign fills these from booking + listing data.
+6. **Standardized lease template** — Hebrew RTL Word/PDF template stored in `templates/lease.docx`, with placeholders for `{{owner_name}}`, `{{corporation_name}}`, `{{property_address}}`, `{{start_date}}`, `{{duration_months}}` (corp-entered 1–12), `{{end_date}}` (server-derived from start + duration), `{{monthly_rent_per_bed}}` (per-bed price as listed), `{{bed_count}}` (apartment capacity), `{{monthly_rent_total}}` (per-bed × bed_count — the contractual monthly rent for the whole apartment per DECISIONS_LOG 2026-05-13), `{{worker_count}}` (capacity, sourced from `listings.bed_count` since the corp doesn't enter it), etc. HelloSign fills these from booking + listing data.
 
 ### Required environment values for CP-4c
 
