@@ -5365,9 +5365,14 @@ CREATE TABLE public.listings (
   bedroom_count       smallint,                                     -- = COUNT(listing_bedrooms)
   bathroom_count      smallint,
 
-  -- Optional facilities — canonical 9-item list locked by DECISIONS_LOG
-  -- 2026-05-13 "Listing optional facilities: expanded to 9 items".
-  -- All default false — every facility is opt-in.
+  -- Facilities — canonical 10-item list locked by DECISIONS_LOG 2026-05-13
+  -- "Facilities list amendment: bunk beds joins the list (10 items);
+  -- answer required, not optional". All columns default false at the DB
+  -- level so inserts always have a value. The first 9 are opt-in via the
+  -- form (unticked = false). has_bunk_beds requires an explicit yes/no
+  -- answer enforced at the form / server-action layer; the DB default of
+  -- false is only used because the column is NOT NULL — the action should
+  -- not insert until the owner has answered.
   has_ac              boolean NOT NULL DEFAULT false,  -- מזגן
   has_wifi            boolean NOT NULL DEFAULT false,  -- אינטרנט
   has_furniture       boolean NOT NULL DEFAULT false,  -- ריהוט
@@ -5377,10 +5382,7 @@ CREATE TABLE public.listings (
   has_living_room     boolean NOT NULL DEFAULT false,  -- סלון
   has_terrace_yard    boolean NOT NULL DEFAULT false,  -- מרפסת / חצר (single boolean covering either)
   has_washing_machine boolean NOT NULL DEFAULT false,  -- מכונת כביסה
-
-  -- Bed configuration — property-level boolean, NOT in the "optional facilities" group.
-  -- Per-bedroom bunk-bed tracking is not in MVP.
-  has_bunk_beds       boolean NOT NULL DEFAULT false,  -- מיטות קומותיים
+  has_bunk_beds       boolean NOT NULL DEFAULT false,  -- מיטות קומותיים (required answer at form layer)
 
   -- Audit
   created_at          timestamptz NOT NULL DEFAULT now(),

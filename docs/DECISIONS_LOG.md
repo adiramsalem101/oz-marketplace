@@ -1320,6 +1320,9 @@ are removed.
 
 ## 2026-05-13 — Listing optional facilities: expanded to 9 items (adds has_living_room + has_gas_cooking back)
 
+> 🔄 **Amended same-day** — see "Facilities list amendment: bunk beds joins the list (10 items); answer required, not optional" below. The list now has 10 items (bunk beds moves into the facilities group), and the "optional" framing is dropped from the group name because bunk beds requires an explicit yes/no answer. The 9 items locked in this entry are unchanged in name and default; only the count and the bunk-beds placement are superseded.
+
+
 **Context:** Same-day review of the "canonical 7-item list" entry above
 flagged that `has_living_room` and `has_gas_cooking` shouldn't have
 been dropped — both carry real signal for the buyer and have a
@@ -1386,6 +1389,91 @@ preceding "Listing optional facilities: canonical 7-item list"
 entry; the bunk-beds clarification, the "all opt-in / default false"
 default policy, and the bedrooms-vs-rooms separation in that entry
 stand.
+
+---
+
+## 2026-05-13 — Facilities list amendment: bunk beds joins the list (10 items); answer required, not optional
+
+**Context:** The prior "Listing optional facilities" entries placed
+`has_bunk_beds` outside the facilities group on the rationale that
+bunk beds describe bed *configuration* rather than a facility/service.
+On product review that distinction reads as overengineering — buyers
+asking "what's in this apartment?" naturally expect bunk-bed info
+alongside the kitchen / AC / wifi list, and grouping them together
+is simpler for both the form and the listing-detail page.
+
+Separately, **the answer to "are there bunk beds?" is required** —
+unlike the other facilities (where leaving a checkbox unticked
+implicitly means "no"), bunk beds needs an explicit owner answer:
+yes or no, no implicit default.
+
+**Decision:**
+
+- `has_bunk_beds` is **part of the facilities list**. The list is now
+  **10 items**.
+- The list is no longer called "**optional** facilities" — drop the
+  "optional" prefix. Canonical name: **"facilities" / "מתקנים"**.
+  Most items in the list are still opt-in (the owner ticks if it
+  applies), but bunk beds requires an explicit answer, so the
+  group-level "optional" label is wrong.
+- All other items keep their `boolean NOT NULL DEFAULT false` schema
+  shape — schema-level defaults stay false for cheap inserts and to
+  preserve the "untouched = false" semantic for the 9 ticky items.
+- `has_bunk_beds` keeps its `boolean NOT NULL DEFAULT false` schema
+  shape too (the column always has a value at the DB level). The
+  "required answer" rule is enforced **at the form / server-action
+  layer** — the listing-form server action rejects inserts/updates
+  where the owner didn't explicitly select yes or no. The form UX
+  (radio group, segmented control, required toggle — design's
+  choice) makes the "you must answer" semantic clear; the submit
+  button stays disabled until the owner has made a choice.
+
+**The canonical 10-item facilities list (final, locked):**
+
+| # | Column | Hebrew label | Answer mode |
+|---|---|---|---|
+| 1 | `has_ac` | מזגן | opt-in (default false) |
+| 2 | `has_wifi` | אינטרנט | opt-in (default false) |
+| 3 | `has_furniture` | ריהוט | opt-in (default false) |
+| 4 | `has_parking` | חניה | opt-in (default false) |
+| 5 | `has_kitchen` | מטבח | opt-in (default false) |
+| 6 | `has_gas_cooking` | כיריים גז | opt-in (default false) |
+| 7 | `has_living_room` | סלון | opt-in (default false) |
+| 8 | `has_terrace_yard` | מרפסת / חצר | opt-in (default false) |
+| 9 | `has_washing_machine` | מכונת כביסה | opt-in (default false) |
+| 10 | `has_bunk_beds` | מיטות קומותיים | **required answer (yes/no)** |
+
+**Implications:**
+
+- No schema column changes vs the prior 9-item lock — `has_bunk_beds`
+  was already a column on `listings`. Only its grouping changes.
+- Glossary entry renamed: "Optional facilities (listing amenity list)"
+  → "Facilities (listing amenity list)".
+- Listing form / detail / marketplace surfaces present a single
+  "מתקנים" section containing all 10 items.
+- The listing-form server action validates that `has_bunk_beds` was
+  set deliberately. Implementation tip: pass `has_bunk_beds` from
+  the form as `boolean | null` (null = not yet answered) and reject
+  null at the action boundary; the DB column stays NOT NULL because
+  the action only inserts after validation.
+
+**Rationale:**
+
+- Grouping all 10 booleans together is simpler for the form, the
+  listing-detail UI, and the marketplace filters (when those
+  arrive). The bed-configuration-vs-facility distinction was real
+  but not load-bearing.
+- Requiring an explicit bunk-beds answer matters because the
+  default-false answer is materially wrong for the buyer when the
+  owner forgets to think about it — a corp expecting standard beds
+  in a 6-bed unit will misallocate space if the unit is actually
+  2× bunk-bed configurations sleeping 6. The form should force
+  the choice.
+
+**Status:** ✅ Locked. Supersedes only the "list is 9 items" and
+"bunk beds outside the facilities group" portions of the preceding
+"expanded to 9 items" entry; the 9 individual items' names and
+defaults stand, and the bedrooms-vs-rooms separation stands.
 
 ---
 

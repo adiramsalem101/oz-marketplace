@@ -105,21 +105,24 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **Per-bedroom compliance check:** `size_sqm >= 4 × bed_count`. Surfaced on the listing form as a per-row indicator (✓ / ⚠) so the owner sees compliance per individual bedroom. Saving as draft is always allowed; publishing a non-compliant listing is allowed in MVP (we display the warning; we don't enforce). Enforcement is a future iteration tied to the verification system.
 **See:** DECISIONS_LOG 2026-05-13 "Per-bedroom data model for תקנות עובדים זרים compliance"; `תקנות עובדים זרים` entry below for the rule itself.
 
-### Optional facilities (listing amenity list)
-**Definition:** The canonical 9-item list of optional facility booleans on `listings`. Owners tick whichever apply when creating a listing. All default `false` — every facility is opt-in.
-**The 9:**
-- `has_ac` — מזגן
-- `has_wifi` — אינטרנט
-- `has_furniture` — ריהוט
-- `has_parking` — חניה
-- `has_kitchen` — מטבח
-- `has_gas_cooking` — כיריים גז
-- `has_living_room` — סלון
-- `has_terrace_yard` — מרפסת / חצר (single boolean covering either)
-- `has_washing_machine` — מכונת כביסה
-**Not in this list:** `has_bunk_beds` (`מיטות קומותיים`) is a separate property-level boolean that describes bed configuration, not a facility; treat it outside the facilities group. Fire-safe is its own deferred amenity (see entry below).
-**Future:** the list is extensible — additions go through DECISIONS_LOG as a new entry, not by adding columns silently.
-**See:** DECISIONS_LOG 2026-05-13 "Listing optional facilities: canonical 7-item list" (initial lock) and "Listing optional facilities: expanded to 9 items (adds has_living_room + has_gas_cooking back)" (same-day amendment).
+### Facilities (listing amenity list)
+**Definition:** The canonical **10-item** list of facility booleans on `listings`. The owner ticks whichever apply when creating a listing — except for **bunk beds**, which requires an explicit yes/no answer.
+**The 10:**
+- `has_ac` — מזגן · opt-in (default false)
+- `has_wifi` — אינטרנט · opt-in (default false)
+- `has_furniture` — ריהוט · opt-in (default false)
+- `has_parking` — חניה · opt-in (default false)
+- `has_kitchen` — מטבח · opt-in (default false)
+- `has_gas_cooking` — כיריים גז · opt-in (default false)
+- `has_living_room` — סלון · opt-in (default false)
+- `has_terrace_yard` — מרפסת / חצר · opt-in (default false; single boolean covering either)
+- `has_washing_machine` — מכונת כביסה · opt-in (default false)
+- `has_bunk_beds` — מיטות קומותיים · **required answer** (the form must collect an explicit yes or no; not pre-filled)
+**Schema vs form semantics:** every column is `boolean NOT NULL DEFAULT false` at the DB level so inserts always have a value. The 9 opt-in items use that default cleanly (unticked = false). For `has_bunk_beds`, the form layer enforces explicit selection — the server action rejects inserts/updates that didn't ask the owner. Implementation tip: pass `has_bunk_beds` through the form action as `boolean | null` (null = not yet answered) and validate non-null at the action boundary.
+**Naming:** the "optional" prefix is dropped from the group name now that bunk beds is required-answer; the canonical group name in UI copy is just **"מתקנים"** / "Facilities".
+**Fire-safe** is its own deferred amenity, separate from this list (see entry below).
+**Future:** the list is extensible — additions go through DECISIONS_LOG as a new entry, not silent column additions.
+**See:** DECISIONS_LOG 2026-05-13 "Listing optional facilities: canonical 7-item list" (initial lock), "expanded to 9 items (adds has_living_room + has_gas_cooking back)" (same-day amendment), and "Facilities list amendment: bunk beds joins the list (10 items); answer required, not optional" (same-day final amendment).
 
 ### Fire-safe (property amenity)
 **Status:** ⏸ **Deferred — not in MVP** (DECISIONS_LOG 2026-05-12). The amenity is defined here so the meaning is locked when it's introduced in a later iteration.
@@ -255,3 +258,4 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 | 2026-05-13 | Amended "Bedrooms vs rooms" entry + added new "Listing bedrooms (listing_bedrooms table)" entry — per-bedroom data captured in a child table for regulation validation; `listings.bedroom_count` + `bed_count` become denormalized aggregates (per DECISIONS_LOG 2026-05-13 per-bedroom-data lock); also augmented `תקנות עובדים זרים` entry with the validation flow | — |
 | 2026-05-13 | Added "Optional facilities" entry — initially locked canonical 7-item facility list (AC, wifi, furniture, parking, kitchen, terrace/yard, washing machine). `has_bunk_beds` reaffirmed as separate from the facilities group. | — |
 | 2026-05-13 | Amended "Optional facilities" entry — list expanded to **9** items, adding `has_living_room` (סלון) and `has_gas_cooking` (כיריים גז) back per DECISIONS_LOG 2026-05-13 "Listing optional facilities: expanded to 9 items". Also reverted the brief "no `has_living_room` boolean" note in "Bedrooms vs rooms" entry. | — |
+| 2026-05-13 | Renamed "Optional facilities" → "Facilities" and expanded to **10** items — `has_bunk_beds` joins the list as a required-answer item (no implicit default at the form layer) per DECISIONS_LOG 2026-05-13 "Facilities list amendment: bunk beds joins". | — |
