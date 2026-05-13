@@ -1100,4 +1100,220 @@ entries.
 
 ---
 
+## 2026-05-13 — Per-bedroom data model for תקנות עובדים זרים compliance
+
+**Context:** The 4 m² rule (DECISIONS_LOG 2026-05-13
+"תקנות עובדים זרים: 4 m² is per-bed-per-bedroom") requires that **each
+bedroom** provide at least 4 m² per bed it contains. Until now the
+listings schema only carried property-level aggregates: `bed_count`
+(total beds in the apartment) and `bedroom_count` (total bedrooms,
+nullable). Those aggregates can't validate the per-bedroom rule — you
+can have a property with 4 bedrooms, 12 beds, and 60 m² that passes
+"on average" but contains an undersized bedroom that fails compliance.
+
+**Decision:** capture per-bedroom data on listing creation as a new
+child table.
+
+**New schema — `public.listing_bedrooms`:**
+
+```sql
+CREATE TABLE public.listing_bedrooms (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  listing_id    uuid NOT NULL REFERENCES public.listings(id) ON DELETE CASCADE,
+  display_order smallint NOT NULL DEFAULT 0,
+  -- Bedroom area in square metres. numeric(5,2) admits 999.99 m² with two
+  -- decimals so owners can enter e.g. 12.5 m². Whole-number entries are fine.
+  size_sqm      numeric(5,2) NOT NULL CHECK (size_sqm > 0),
+  -- Beds in this specific bedroom. The per-bedroom regulation check is
+  -- `size_sqm >= 4 * bed_count`. CHECK BETWEEN 1 AND 12 because more than
+  -- 12 beds in a single bedroom is implausible and almost certainly a
+  -- data-entry error.
+  bed_count     smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 12),
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX listing_bedrooms_listing_idx
+  ON public.listing_bedrooms(listing_id, display_order);
+```
+
+**Property-level aggregates become denormalized:**
+
+- `listings.bedroom_count smallint` (nullable) — superseded as a hand-entered
+  number; now **derived** from `COUNT(listing_bedrooms WHERE listing_id = X)`.
+  Stored on `listings` for cheap reads (marketplace cards, filters).
+- `listings.bed_count smallint` — now **derived** from
+  `SUM(listing_bedrooms.bed_count WHERE listing_id = X)`. Stored on
+  `listings` for cheap reads.
+- Both aggregates are populated by the listing-form server action at
+  save time alongside the `listing_bedrooms` upsert. No DB triggers —
+  the server action is the single writer.
+- The earlier 2026-05-13 entry "Listing fields: bedrooms (not rooms) +
+  four amenities" wrote `bedroom_count` as a direct numeric input on
+  the form. **That portion is superseded** — there's no standalone
+  bedroom-count input; the count comes from the rooms editor.
+
+**Listing form changes:**
+
+- The form loses the standalone `מספר חדרי שינה` numeric input.
+- It gains a **rooms editor** section ("חדרי שינה") with an "הוסף חדר"
+  button. Each row captures `size_sqm` + `bed_count` for one bedroom.
+  At least one row is required to publish.
+- The form computes and displays `סה״כ מיטות: N` and
+  `סה״כ חדרי שינה: M` derived from the rows.
+- Per-row compliance indicator: each row shows a check or warning
+  against the 4 m² rule. Warning copy when failing:
+  *"חדר זה אינו עומד בתקנות עובדים זרים — נדרשים 4 מ״ר לכל מיטה
+  (חדר עם N מיטות חייב להיות לפחות 4N מ״ר)."* Saving as draft is
+  always allowed; publishing a non-compliant listing is allowed too
+  in MVP (we surface the warning to the owner; we don't enforce).
+  Enforcement / a marketplace compliance badge is a future iteration.
+- The bedroom inputs are per-bedroom only — a living room is **not**
+  a bedroom; it stays captured by the separate `has_living_room`
+  boolean amenity per the earlier 2026-05-13 entry.
+
+**Bunk-beds clarification (reaffirmed, not new):**
+
+`listings.has_bunk_beds boolean NOT NULL DEFAULT false` stays a
+**property-level** amenity, alongside `has_kitchen`, `has_living_room`,
+`has_wifi`, `has_parking`, `has_ac`, `has_gas_cooking`. It is not
+captured per-bedroom in MVP — the owner ticks a single property-level
+checkbox indicating whether the unit includes bunk beds anywhere.
+Per-bedroom bunk-bed tracking can join `listing_bedrooms` in a future
+iteration if it turns out to matter; for now property-level is enough.
+This reaffirms the entry locked in
+DECISIONS_LOG 2026-05-13 "Listing fields: bedrooms (not rooms) + four
+amenities".
+
+**Marketplace + downstream implications:**
+
+- The marketplace "מינ׳ מיטות" filter continues to read
+  `listings.bed_count` (the denormalized sum) — no join needed.
+- Listing detail page shows the per-bedroom breakdown table when the
+  buyer expands a "פירוט חדרים" section: each row "חדר N · X מ״ר ·
+  Y מיטות · ✓/⚠ עומד בתקנות".
+- The booking total math (DECISIONS_LOG 2026-05-13 "Leasing-model
+  amendment") still uses `monthly_rent_per_bed × bed_count ×
+  duration_months + 3%`. `bed_count` is now the denormalized sum,
+  so the math is unchanged.
+- When the verification system eventually resumes (deferred per
+  DECISIONS_LOG 2026-05-12), the Level-2 remote attestation flow
+  reviews the `listing_bedrooms` rows specifically to confirm each
+  bedroom's area is what the owner says it is.
+
+**Rationale:**
+
+- The 4 m² rule is the only way construction corporations can ship
+  a compliant lease. The platform should make it trivially obvious
+  to an owner whether their listing will meet the requirement —
+  ideally before they publish.
+- A child table is the right shape: bedrooms vary in size and bed
+  count, and aggregates obscure the per-room failures the regulation
+  actually cares about.
+- Denormalized aggregates on the parent keep the marketplace fast
+  without adding joins; the server action keeps them in sync.
+- Bunk beds stay property-level because the corporation's question
+  is "does this apartment have bunks?" not "which exact bedroom has
+  them?". The latter belongs in photos and the lease attachment.
+
+**Status:** ✅ Locked. Supersedes only the "bedroom_count as direct
+numeric input on the listing form" portion of the earlier 2026-05-13
+"Listing fields" entry; the four amenity additions and the
+bedrooms-vs-rooms terminology lock in that entry stand.
+
+---
+
+## 2026-05-13 — Listing optional facilities: canonical 7-item list
+
+**Context:** Earlier 2026-05-13 entries accumulated an amenity set
+piecemeal — `has_kitchen`, `has_wifi`, `has_parking` from the initial
+schema, then `has_living_room`, `has_bunk_beds`, `has_ac`,
+`has_gas_cooking` from "Listing fields: bedrooms (not rooms) + four
+amenities". On product review the list was wrong in two directions:
+some items don't belong in the canonical "optional facilities" group
+(`has_living_room` is a structural feature, not an amenity;
+`has_gas_cooking` over-specifies the cooking surface), and three items
+were missing (`has_furniture`, `has_terrace_yard`, `has_washing_machine`).
+Lock the canonical list here.
+
+**Decision:** the listing's "optional facilities" group is exactly
+these **seven booleans**, in this order:
+
+| # | Column | Hebrew label | Notes |
+|---|---|---|---|
+| 1 | `has_ac` | מזגן | |
+| 2 | `has_wifi` | אינטרנט | |
+| 3 | `has_furniture` | ריהוט | New — apartment is furnished or not. |
+| 4 | `has_parking` | חניה | |
+| 5 | `has_kitchen` | מטבח | Default flipped to `false` (opt-in like the others). |
+| 6 | `has_terrace_yard` | מרפסת / חצר | New — single boolean covering either a terrace or a yard. Splitting into two columns is out of scope; if the distinction matters later, refine via a Dream. |
+| 7 | `has_washing_machine` | מכונת כביסה | New. |
+
+**Dropped from earlier locks (do not add back without a new entry):**
+
+- `has_living_room` — superseded. A living room is a structural
+  property of the apartment, not an optional facility. The bedrooms-
+  vs-rooms semantic lock (DECISIONS_LOG 2026-05-13 "Listing fields")
+  stands — the form counts bedrooms, not rooms — but no boolean
+  tracks whether a living room exists. If an owner wants to advertise
+  "no living room / studio layout", they use the description field.
+- `has_gas_cooking` — superseded. Cooking-surface type isn't worth a
+  structured field; `has_kitchen` covers the kitchen existence
+  question and any gas-vs-electric nuance lives in the description
+  field.
+
+**Bunk-beds clarification — outside the facilities group:**
+
+`has_bunk_beds` (`מיטות קומותיים`) **stays** as a property-level
+boolean on `listings` (reaffirming the lock in DECISIONS_LOG
+2026-05-13 "Listing fields"). It is **not** part of the "optional
+facilities" group — bunk beds describe bed configuration, not a
+facility/service. The schema places it alongside `has_*` columns as
+a convenience, but UI treatments should group it with bed-related
+questions, not in the facilities checklist.
+
+**Schema implications:**
+
+- `listings` keeps: `has_ac`, `has_wifi`, `has_furniture`,
+  `has_parking`, `has_kitchen`, `has_terrace_yard`,
+  `has_washing_machine`, `has_bunk_beds`.
+- `listings` drops (from earlier-locked-but-now-superseded): `has_living_room`,
+  `has_gas_cooking`. These columns may already exist in a local
+  Supabase from the earlier locks but were never deployed to a real
+  Supabase (the migration was authored but the project is pre-launch).
+  When the canonical-facilities migration ships, it adds the three
+  new columns and drops the two superseded columns in the same
+  migration — destructive drops are permitted here because no
+  production data exists yet (IRON_RULE 3 still applies for the
+  approval workflow, but the data-loss concern doesn't).
+- The `has_kitchen` default flips from `true` to `false` to match
+  the other facilities — owners explicitly tick what their apartment
+  offers.
+
+**Rationale:**
+
+- A flat 7-item facility list is the right shape for the listing
+  form: short enough to render as a single group, structured enough
+  to drive marketplace filters per facility once those are
+  introduced (out of MVP).
+- Slashing `has_living_room` and `has_gas_cooking` cuts noise without
+  losing real signal — both can be inferred from the description or
+  the photos.
+- Adding furniture, terrace/yard, and washing machine fills gaps
+  that crews ask about during property visits.
+- Bunk beds stays property-level (per the previous "no per-bedroom
+  bunk tracking" decision) but lives outside the facilities group
+  because it answers a different question ("what's the bed
+  configuration?" not "what does the apartment provide?").
+
+**Status:** ✅ Locked. Supersedes the amenity-list portion of the
+earlier 2026-05-13 "Listing fields: bedrooms (not rooms) + four
+amenities" entry — specifically the four new booleans named there
+(`has_living_room`, `has_bunk_beds`, `has_ac`, `has_gas_cooking`)
+are no longer the canonical set. `has_bunk_beds` survives as a
+separate (non-facilities) property-level boolean; `has_ac` survives
+in the new facilities list; `has_living_room` and `has_gas_cooking`
+are removed.
+
+---
+
 **End of decisions log. Append new entries below this line.**

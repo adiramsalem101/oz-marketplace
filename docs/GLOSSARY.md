@@ -92,11 +92,32 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **See:** `IRON_RULES.md` Rule 2
 
 ### Bedrooms vs rooms (`חדרי שינה` vs `חדרים`)
-**Definition:** In oz-marketplace, the listing form asks the owner how many **bedrooms** (`חדרי שינה`) the apartment has — **not** how many **rooms** (`חדרים`).
+**Definition:** In oz-marketplace, the listing form asks the owner about **bedrooms** (`חדרי שינה`) — **not** **rooms** (`חדרים`).
 **Why this matters:** In Israeli real-estate vocabulary, a "4-room apartment" (`דירת 4 חדרים`) conventionally means 3 bedrooms + 1 living room. Counting "rooms" inflates the number and is ambiguous; counting "bedrooms" is unambiguous and matches the buyer's actual question (how many sleeping spaces can be configured?).
-**Schema:** `listings.bedroom_count smallint` (nullable, per future migration). Hebrew label on the form: `מספר חדרי שינה`. Never `room_count` / `rooms` / `room_amount`.
-**Related:** The living room is captured separately as a boolean amenity (`listings.has_living_room` — Hebrew label `סלון`), so an owner with a 3-bedroom + living room apartment marks `bedroom_count = 3` and `has_living_room = true`.
-**See:** DECISIONS_LOG 2026-05-13 "Listing fields: bedrooms (not rooms) + four amenities"
+**Schema:** the listing form captures per-bedroom data via `public.listing_bedrooms` rows (one row per bedroom — `size_sqm` + `bed_count`). `listings.bedroom_count smallint` and `listings.bed_count smallint` on the parent are denormalized aggregates derived from the child rows at save time. Never `room_count` / `rooms` / `room_amount`.
+**Related:** A living room is **not** a bedroom and is not counted as one — the apartment may have a living room but it doesn't go into `listing_bedrooms`. There is also **no** `has_living_room` boolean on the schema (the column was locked earlier on 2026-05-13 and then dropped on the same day per the "Listing optional facilities" canonical list — see entry below); if an owner wants to advertise a studio / no-living-room layout, they use the description field.
+**See:** DECISIONS_LOG 2026-05-13 "Listing fields: bedrooms (not rooms) + four amenities", "Per-bedroom data model for תקנות עובדים זרים compliance" (same-day refinement), and "Listing optional facilities: canonical 7-item list" (same-day amenity-list lock).
+
+### Listing bedrooms (`listing_bedrooms` table)
+**Definition:** Child table of `listings` capturing per-bedroom data — one row per bedroom — so the 4 m² regulation can be validated per individual bedroom rather than against a property aggregate. Each row: `size_sqm` (numeric(5,2), > 0) + `bed_count` (smallint, 1–12) + `display_order` for stable ordering.
+**Why a child table:** the 4 m² rule is per-bedroom, never averaged. A property-level aggregate hides the failure — a 4-bedroom 60 m² apartment with one 8 m² bedroom containing 3 beds fails compliance even though it "averages" well.
+**Aggregates on the parent:** `listings.bed_count = SUM(listing_bedrooms.bed_count)` and `listings.bedroom_count = COUNT(listing_bedrooms)`. Both denormalized at save time by the listing-form server action — there are no DB triggers; the server action is the single writer. The marketplace "מינ׳ מיטות" filter reads the parent aggregate without a join.
+**Per-bedroom compliance check:** `size_sqm >= 4 × bed_count`. Surfaced on the listing form as a per-row indicator (✓ / ⚠) so the owner sees compliance per individual bedroom. Saving as draft is always allowed; publishing a non-compliant listing is allowed in MVP (we display the warning; we don't enforce). Enforcement is a future iteration tied to the verification system.
+**See:** DECISIONS_LOG 2026-05-13 "Per-bedroom data model for תקנות עובדים זרים compliance"; `תקנות עובדים זרים` entry below for the rule itself.
+
+### Optional facilities (listing amenity list)
+**Definition:** The canonical 7-item list of optional facility booleans on `listings`. Owners tick whichever apply when creating a listing.
+**The 7:**
+- `has_ac` — מזגן
+- `has_wifi` — אינטרנט
+- `has_furniture` — ריהוט
+- `has_parking` — חניה
+- `has_kitchen` — מטבח (default `false` — opt-in like the others)
+- `has_terrace_yard` — מרפסת / חצר (single boolean covering either)
+- `has_washing_machine` — מכונת כביסה
+**Not in this list:** `has_bunk_beds` (`מיטות קומותיים`) is a separate property-level boolean that describes bed configuration, not a facility; treat it outside the facilities group. `has_living_room` and `has_gas_cooking` were locked earlier the same day and then dropped — they are **not** part of the canonical schema. Fire-safe is its own deferred amenity (see entry below).
+**Future:** the list is extensible — additions go through DECISIONS_LOG as a new entry, not by adding columns silently.
+**See:** DECISIONS_LOG 2026-05-13 "Listing optional facilities: canonical 7-item list"
 
 ### Fire-safe (property amenity)
 **Status:** ⏸ **Deferred — not in MVP** (DECISIONS_LOG 2026-05-12). The amenity is defined here so the meaning is locked when it's introduced in a later iteration.
@@ -174,6 +195,7 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 ### תקנות עובדים זרים (Foreign Workers Regulations)
 **Definition:** Israeli regulation governing housing standards for foreign workers. Compliance is a core platform feature.
 **Key area requirement — per-bedroom, never aggregate (locked 2026-05-13):** the regulation requires **a minimum of 4 m² per bed within each bedroom**. A bedroom with N beds must be at least (4 × N) m² — for example, 3 beds → ≥ 12 m², 5 beds → ≥ 20 m². The minimum is calculated per individual bedroom, never averaged across the property; a property with one undersized bedroom fails compliance even if its total area exceeds the aggregate threshold.
+**Validation data:** captured per-bedroom in `listing_bedrooms` (`size_sqm` + `bed_count` per row). The listing form surfaces a per-row compliance indicator (`size_sqm >= 4 × bed_count`) and an aggregate signal across all bedrooms; the owner sees the warning but is not blocked from publishing in MVP. See `Listing bedrooms (listing_bedrooms table)` entry above.
 **Other key requirements:** ventilation, sanitary facilities (1:6 ratio), fire safety (see `Fire-safe (property amenity)` — deferred from MVP).
 **Canonical Hebrew phrasings:**
 - Long form (legal callout): *"תקנות עובדים זרים מחייבות מינימום 4 מ״ר לכל מיטה בכל חדר שינה. חדר שינה עם N מיטות חייב להיות לפחות (4 × N) מ״ר — לדוגמה: 3 מיטות → לפחות 12 מ״ר. חישוב לפי חדר, לא לפי ממוצע בנכס."*
@@ -228,3 +250,5 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 | 2026-05-13 | Added "Full-property lease (MVP leasing model)" entry — locks full-apartment-only leasing + binary availability per DECISIONS_LOG 2026-05-13 | — |
 | 2026-05-13 | Amended "Full-property lease" entry — price display stays per-bed; booking total derived as `monthly_rent_per_bed × bed_count × months` (same-day correction per DECISIONS_LOG 2026-05-13 amendment) | — |
 | 2026-05-13 | Amended "Full-property lease" entry — booking form takes start_date + duration_months (1–12) only; no end-date input, no message input; `end_date` server-derived (per DECISIONS_LOG 2026-05-13 booking-form lock) | — |
+| 2026-05-13 | Amended "Bedrooms vs rooms" entry + added new "Listing bedrooms (listing_bedrooms table)" entry — per-bedroom data captured in a child table for regulation validation; `listings.bedroom_count` + `bed_count` become denormalized aggregates (per DECISIONS_LOG 2026-05-13 per-bedroom-data lock); also augmented `תקנות עובדים זרים` entry with the validation flow | — |
+| 2026-05-13 | Added "Optional facilities" entry — locks canonical 7-item facility list (AC, wifi, furniture, parking, kitchen, terrace/yard, washing machine) and notes `has_living_room` and `has_gas_cooking` are dropped per DECISIONS_LOG 2026-05-13 "Listing optional facilities" lock. `has_bunk_beds` reaffirmed as separate from the facilities group. | — |

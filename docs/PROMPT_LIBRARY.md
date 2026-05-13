@@ -5348,22 +5348,38 @@ CREATE TABLE public.listings (
   -- pays for the whole apartment — total = monthly_rent_per_bed × bed_count × months.
   -- There is no partial-apartment booking; bed_count drives both the visible
   -- per-bed price and the total math.
+  --
+  -- bed_count is now a DENORMALIZED AGGREGATE = SUM(listing_bedrooms.bed_count).
+  -- Populated by the listing-form server action; not hand-entered on the form.
+  -- The CHECK (1..50) still applies as a sanity bound on the resulting sum.
   bed_count            smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 50),
   monthly_rent_per_bed integer NOT NULL CHECK (monthly_rent_per_bed > 0),  -- in ILS, no decimals
 
-  -- Amenities (extensible; add columns as we discover requirements).
-  -- bedroom_count is the count of *bedrooms* (חדרי שינה), NOT rooms (חדרים).
-  -- See DECISIONS_LOG 2026-05-13 for the bedrooms-vs-rooms distinction.
+  -- Property-level fields.
+  -- bedroom_count and bed_count are denormalized aggregates of the child
+  -- listing_bedrooms rows (see table below), populated by the listing-form
+  -- server action at save time. bedroom_count is the count of *bedrooms*
+  -- (חדרי שינה), NOT rooms (חדרים). See DECISIONS_LOG 2026-05-13
+  -- "Per-bedroom data model for תקנות עובדים זרים compliance".
   area_sqm            integer,
-  bedroom_count       smallint,
+  bedroom_count       smallint,                                     -- = COUNT(listing_bedrooms)
   bathroom_count      smallint,
-  has_kitchen         boolean NOT NULL DEFAULT true,
-  has_living_room     boolean NOT NULL DEFAULT false,
-  has_wifi            boolean NOT NULL DEFAULT false,
-  has_parking         boolean NOT NULL DEFAULT false,
-  has_ac              boolean NOT NULL DEFAULT false,
-  has_gas_cooking     boolean NOT NULL DEFAULT false,
-  has_bunk_beds       boolean NOT NULL DEFAULT false,
+
+  -- Optional facilities — canonical 7-item list locked by
+  -- DECISIONS_LOG 2026-05-13 "Listing optional facilities: canonical 7-item list".
+  -- Earlier locks for has_living_room and has_gas_cooking are SUPERSEDED;
+  -- those columns are not part of the canonical schema.
+  has_ac              boolean NOT NULL DEFAULT false,  -- מזגן
+  has_wifi            boolean NOT NULL DEFAULT false,  -- אינטרנט
+  has_furniture       boolean NOT NULL DEFAULT false,  -- ריהוט
+  has_parking         boolean NOT NULL DEFAULT false,  -- חניה
+  has_kitchen         boolean NOT NULL DEFAULT false,  -- מטבח (default flipped to false; opt-in like other facilities)
+  has_terrace_yard    boolean NOT NULL DEFAULT false,  -- מרפסת / חצר (single boolean covering either)
+  has_washing_machine boolean NOT NULL DEFAULT false,  -- מכונת כביסה
+
+  -- Bed configuration — property-level boolean, NOT in the "optional facilities" group.
+  -- Per-bedroom bunk-bed tracking is not in MVP.
+  has_bunk_beds       boolean NOT NULL DEFAULT false,  -- מיטות קומותיים
 
   -- Audit
   created_at          timestamptz NOT NULL DEFAULT now(),
@@ -5380,6 +5396,34 @@ CREATE TRIGGER listings_set_updated_at
   BEFORE UPDATE ON public.listings
   FOR EACH ROW
   EXECUTE FUNCTION public.set_updated_at();
+
+-- Listing bedrooms. Per-bedroom area + bed count so the 4 m² regulation
+-- (תקנות עובדים זרים: minimum 4 m² per bed within each bedroom) can be
+-- validated per individual bedroom rather than against a property aggregate.
+-- See DECISIONS_LOG 2026-05-13 "Per-bedroom data model for תקנות עובדים זרים
+-- compliance".
+--
+-- listings.bedroom_count = COUNT(listing_bedrooms WHERE listing_id = ?)
+-- listings.bed_count     = SUM(listing_bedrooms.bed_count WHERE listing_id = ?)
+-- Both aggregates are populated by the listing-form server action at save
+-- time; no DB triggers — the server action is the single writer.
+CREATE TABLE public.listing_bedrooms (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  listing_id    uuid NOT NULL REFERENCES public.listings(id) ON DELETE CASCADE,
+  display_order smallint NOT NULL DEFAULT 0,
+  -- Bedroom area in square metres. numeric(5,2) admits 999.99 m² with two
+  -- decimals so owners can enter e.g. 12.5 m². Whole-number entries are fine.
+  size_sqm      numeric(5,2) NOT NULL CHECK (size_sqm > 0),
+  -- Beds in this specific bedroom. The per-bedroom regulation check is
+  -- `size_sqm >= 4 * bed_count`. CHECK BETWEEN 1 AND 12 because more than
+  -- 12 beds in a single bedroom is implausible and almost certainly a
+  -- data-entry error.
+  bed_count     smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 12),
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX listing_bedrooms_listing_idx
+  ON public.listing_bedrooms(listing_id, display_order);
 
 -- Listing images. Stored in Supabase Storage (bucket: 'listing-images'),
 -- this table holds the path + display order.
