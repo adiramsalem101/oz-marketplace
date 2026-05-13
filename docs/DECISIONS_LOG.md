@@ -1477,4 +1477,78 @@ defaults stand, and the bedrooms-vs-rooms separation stands.
 
 ---
 
+## 2026-05-13 — `owner_company` user role: canonical Hebrew label is "מנהל נכס"
+
+**Context:** The supply-side user role is the `user_role` enum value
+`owner_company` (locked 2026-05-05, expanded 2026-05-06 to add
+`construction_corporation` alongside). Earlier prompts used Hebrew
+labels like "חברה לניהול נכסים" (property-management company) and
+"אני חברת ניהול" (I am a management company) — these described the
+*company* rather than the *user*, and they read awkwardly in a
+form-field context. Lock the canonical Hebrew label here.
+
+**Decision:** the canonical Hebrew display name for the `owner_company`
+user role is **"מנהל נכס"** (literally "property manager"). Use this
+string verbatim:
+
+- Sign-up persona picker label
+- Profile page role display
+- Email salutations / addressee role
+- Any UI element that names the role to the user
+- Admin Studio role-picker labels (for consistency)
+
+Don't introduce alternatives ("בעל נכס", "חברת ניהול", "מנהל נכסים"
+plural, etc.) — they fragment the vocabulary. If the team wants to
+shorten or pluralize for a specific surface, propose it in a new
+DECISIONS_LOG entry first.
+
+**Companies, not users, own properties — clarification:**
+
+- The `companies` table represents a property-owning **company**
+  (legal entity with ח.פ. or ע.מ., banking info, etc.).
+- The `owner_company` **user_role** represents a **person who works
+  for** that company and acts on its behalf in the marketplace —
+  posting listings, accepting bookings, signing leases. The role
+  name in Hebrew is "מנהל נכס".
+- MVP locks **single user per company** (DECISIONS_LOG 2026-04-30
+  "B2B MVP: single user per company"). One `companies` row maps to
+  one `profiles` row with `role = 'owner_company'`. Multi-user team
+  accounts within a single company are a Dream — when they ship,
+  every user from a property-owning company still has the same
+  `owner_company` role (Hebrew label "מנהל נכס"); sub-roles within
+  a company (admin / employee / viewer) are not in the schema and
+  not planned for the first multi-user iteration either. There is
+  **one type of role for a user from a property-owning company.**
+
+**Implications:**
+
+- `PROMPT_LIBRARY` sign-up persona picker text "חברה לניהול נכסים"
+  is updated to **"מנהל נכס"**. Other sign-up persona labels
+  ("תאגיד בנייה" for `construction_corporation`, "פרטיים" for the
+  coming-soon `owner_individual`) are unchanged.
+- `GLOSSARY` gets a new "owner_company / מנהל נכס" entry; stale
+  legacy entries (`b2b_owner`, `b2c_owner`, `corporate_member`) are
+  marked superseded.
+- `BUILD_PLAN` §3.B picker description updated.
+- No schema change. The English enum value `owner_company` stays
+  (renaming would be a destructive migration with no payoff;
+  English-side stability matters for code/types/RLS policies).
+- No additional sub-roles within `owner_company` in MVP. Avoid
+  inventing UI affordances that imply multi-role/multi-user company
+  accounts.
+
+**Rationale:**
+
+- "מנהל נכס" describes a person, which matches what a `user_role`
+  represents. "חברה לניהול נכסים" was describing the company itself
+  and reading it back in the persona picker created cognitive
+  friction ("am I picking a *company* or am I picking *me*?").
+- Locking one canonical translation prevents the kind of vocabulary
+  fragmentation that hit "Audit Pack" / "תיק נכס" before we locked
+  that one.
+
+**Status:** ✅ Locked.
+
+---
+
 **End of decisions log. Append new entries below this line.**

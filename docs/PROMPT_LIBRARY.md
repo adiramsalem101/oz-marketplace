@@ -3936,7 +3936,7 @@ waiting for high-touch onboarding).
 
 The sign-up persona picker now offers three options:
 
-1. **"חברה לניהול נכסים"** → creates `owner_company`
+1. **"מנהל נכס"** → creates `owner_company` (canonical label per DECISIONS_LOG 2026-05-13 "`owner_company` user role: canonical Hebrew label")
 2. **"תאגיד בנייה"** → creates `construction_corporation`
 3. **"פרטיים"** → friendly "coming soon" message; no account created
 
@@ -4732,7 +4732,7 @@ export default function SignUpPage() {
 
       <div className={styles.choices}>
         <Button variant="cta" fullWidth onClick={() => setPersona('company')}>
-          חברה לניהול נכסים
+          מנהל נכס
         </Button>
         <Button variant="cta" fullWidth onClick={() => setPersona('corporation')}>
           תאגיד בנייה
@@ -5144,7 +5144,7 @@ kill $DEV_PID 2>/dev/null
 PASS iff:
 - Both codes are `200`
 - `/tmp/oz-signin.html` contains `lang="he"`, `dir="rtl"`, `המשך עם Google`, `שלחו לי קישור התחברות`, `שלחו לי קוד SMS`
-- `/tmp/oz-signup.html` contains `חברה לניהול נכסים`, `אני בעל נכס פרטי`
+- `/tmp/oz-signup.html` contains `מנהל נכס`, `אני בעל נכס פרטי`
 - `/tmp/oz-dev.log` contains no `Error:` or `Failed to compile`
 
 ### Test E — Middleware exists and matcher excludes static assets

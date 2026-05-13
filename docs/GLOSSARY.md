@@ -12,24 +12,33 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 ### admin
 **Definition:** Internal operations / engineering. Highest access. One of the `user_role` enum values (BUILD_PLAN §3.B / OQ-3 + OQ-4).
 
-### B2B
-**Definition:** Business-to-business path. The user is a real estate management company that handles multiple properties professionally.
-**See:** `specs/B2B_MVP.md`, `specs/dreams/B2B_DREAMS.md`
-**Note:** B2B and B2C are **separate products** with separate dashboards, not progressive tiers.
-
 ### b2b_owner
-**Definition:** Manager-class supplier — a real estate management company. One of the `user_role` enum values.
-
-### B2C
-**Definition:** Business-to-consumer path. The user is a private property owner managing 1–5 properties on their own.
-**Persona name:** Solo Operator (or just "Solo")
-**See:** `specs/B2C_MVP.md`, `specs/dreams/B2C_DREAMS.md`
+**Status:** 🔄 Superseded (2026-05-05). Renamed to `owner_company` (see entry below); the canonical Hebrew display label for that role is **"מנהל נכס"** per DECISIONS_LOG 2026-05-13.
 
 ### b2c_owner
-**Definition:** Solo Operator — private property owner. The default role assigned to new signups by the persona-aware `handle_new_user()` trigger. One of the `user_role` enum values.
+**Status:** 🔄 Superseded (2026-05-05). Renamed to `owner_individual`. Reserved enum value, not signupable in MVP per BUILD_PLAN §3.B.
 
 ### corporate_member
-**Definition:** Construction-corporation buyer (demand side). One of the `user_role` enum values.
+**Status:** 🔄 Superseded (2026-05-05). Renamed to `construction_corporation`.
+
+### B2B
+**Definition:** Business-to-business path. The user is a property-owning company. In oz-marketplace this is a single `user_role` value — `owner_company`, Hebrew label "מנהל נכס".
+**Note:** the legacy "B2B vs B2C" framing referred to two separate products with separate dashboards. The MVP scope re-lock (DECISIONS_LOG 2026-05-06) collapsed that — there is only one marketplace product, with `owner_company` and `construction_corporation` as the two sign-upable user roles. The "B2B" terminology survives in casual prose and in the dreams spec (`specs/dreams/B2B_DREAMS.md`) but isn't a product-level distinction.
+
+### B2C
+**Definition:** Business-to-consumer path — the private-individual property-owner persona. **Out of MVP**: the `owner_individual` enum value exists but no signup flow leads to it. See `specs/B2C_MVP.md`, `specs/dreams/B2C_DREAMS.md`.
+
+### construction_corporation
+**Definition:** Demand-side user role — a person acting on behalf of a construction corporation buying housing capacity for foreign workers. Signupable in MVP via the "תאגיד בנייה" persona picker (DECISIONS_LOG 2026-05-06).
+
+### owner_company / מנהל נכס
+**Definition:** Supply-side user role — a person acting on behalf of a property-owning company. The `user_role` enum value is `owner_company`; the canonical Hebrew display label is **"מנהל נכס"** (DECISIONS_LOG 2026-05-13).
+**Single-role-per-company:** MVP has one and only one type of role for a user from a property-owning company — there are no sub-roles (admin / employee / viewer) inside a company. Multi-user team accounts are a Dream; even when they ship, every user from a property-owning company carries the same `owner_company` role.
+**Hebrew vocabulary lock:** the label "מנהל נכס" is canonical for all UI surfaces — sign-up persona picker, profile-page role display, email salutations, admin Studio. Do not use alternatives ("בעל נכס", "חברת ניהול", "מנהל נכסים" plural, "חברה לניהול נכסים").
+**See:** DECISIONS_LOG 2026-05-13 "`owner_company` user role: canonical Hebrew label is 'מנהל נכס'"; BUILD_PLAN §3.B.
+
+### owner_individual
+**Definition:** Reserved `user_role` enum value for the private-individual property-owner persona. **Not signupable in MVP**: the persona picker shows a "coming soon" message instead of creating an account.
 
 ### Demand side
 **Definition:** Construction corporations who need housing for their foreign workers. They are the "buyers" on the platform — corporate users with KYC-verified company accounts.
@@ -45,8 +54,7 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **See:** `specs/dreams/B2B_DREAMS.md`
 
 ### Manager
-**Definition:** Real estate management company. The B2B MVP persona. Manages 5+ properties professionally for corporate clients.
-**See:** `specs/B2B_MVP.md`
+**Status:** 🔄 Legacy persona name. In oz-marketplace this concept maps directly to the `owner_company` user role — Hebrew label **"מנהל נכס"** — per DECISIONS_LOG 2026-05-13. Use the canonical labels in any new UI / spec text; the "Manager" persona name survives only in legacy prose and the dreams spec.
 
 ### Solo Operator (Solo)
 **Definition:** Private property owner. The B2C MVP persona. Owns 1–5 properties, manages alone.
@@ -181,8 +189,9 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **See:** `ROLES_AND_RLS.md` (filled in Phase 3)
 
 ### user_role enum
-**Definition:** PostgreSQL enum type defining the four user roles in oz-marketplace: `b2c_owner`, `corporate_member`, `b2b_owner`, `admin`. Replaces the legacy 7-value `profiles.role` text column.
-**See:** BUILD_PLAN §3.B (OQ-3 + OQ-4)
+**Definition:** PostgreSQL enum type defining the four user roles in oz-marketplace: `owner_individual`, `owner_company` (Hebrew label "מנהל נכס"), `construction_corporation`, `admin`. The pre-2026-05-05 values (`b2c_owner`, `corporate_member`, `b2b_owner`) are superseded — see those entries.
+**Signupable in MVP:** `owner_company` and `construction_corporation` only. `owner_individual` is reserved but unreachable in MVP signup. `admin` is Studio-invited.
+**See:** BUILD_PLAN §3.B (OQ-3 + OQ-4); DECISIONS_LOG 2026-05-05 (enum-rename); DECISIONS_LOG 2026-05-06 (`construction_corporation` made signupable); DECISIONS_LOG 2026-05-13 (canonical Hebrew label for `owner_company`).
 
 ---
 
@@ -259,3 +268,4 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 | 2026-05-13 | Added "Optional facilities" entry — initially locked canonical 7-item facility list (AC, wifi, furniture, parking, kitchen, terrace/yard, washing machine). `has_bunk_beds` reaffirmed as separate from the facilities group. | — |
 | 2026-05-13 | Amended "Optional facilities" entry — list expanded to **9** items, adding `has_living_room` (סלון) and `has_gas_cooking` (כיריים גז) back per DECISIONS_LOG 2026-05-13 "Listing optional facilities: expanded to 9 items". Also reverted the brief "no `has_living_room` boolean" note in "Bedrooms vs rooms" entry. | — |
 | 2026-05-13 | Renamed "Optional facilities" → "Facilities" and expanded to **10** items — `has_bunk_beds` joins the list as a required-answer item (no implicit default at the form layer) per DECISIONS_LOG 2026-05-13 "Facilities list amendment: bunk beds joins". | — |
+| 2026-05-13 | Added "owner_company / מנהל נכס" entry locking the canonical Hebrew label for the supply-side user role; updated `user_role enum` entry to reflect current enum values; marked stale `b2b_owner` / `b2c_owner` / `corporate_member` entries superseded; flagged "Manager" persona name as legacy. | — |
