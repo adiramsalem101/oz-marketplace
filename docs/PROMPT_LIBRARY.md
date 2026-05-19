@@ -1,5 +1,7 @@
 # oz-marketplace · PROMPT_LIBRARY
 
+> **⚠️ UI rebuild in progress (2026-05-13):** Phases 0 (tokens / fonts / RTL), 1 (primitives), 2 (layout chrome), and the UI portions of Phases 3 and 4 (auth pages, listing form, public marketplace, booking form, homepage, hostels page) have been **deleted from the repo**. The code blocks under those phases below are **historical reference**, not currently-shipping code. UI is being rebuilt fresh in **Claude Design**. Treat the Hebrew copy strings, the schema column names, the form-field shapes, and the price/availability rules in these prompts as **design spec for the new UI** (the product decisions are still valid; only the React + SCSS code is dead). Server-side prompts (Phase 3 migrations, RLS, the BookingRequestForm payload shape that hits `bookings`, the listing schema) remain authoritative.
+
 **Status:** Phase 0 ready · Phases 1–9 stubbed
 **Generated:** 2026-05-02
 **Owner:** Adir
@@ -3934,7 +3936,7 @@ waiting for high-touch onboarding).
 
 The sign-up persona picker now offers three options:
 
-1. **"חברה לניהול נכסים"** → creates `owner_company`
+1. **"מנהל נכס"** → creates `owner_company` (canonical label per DECISIONS_LOG 2026-05-13 "`owner_company` user role: canonical Hebrew label")
 2. **"תאגיד בנייה"** → creates `construction_corporation`
 3. **"פרטיים"** → friendly "coming soon" message; no account created
 
@@ -3980,8 +3982,8 @@ Logged in `TASKS.md` Future-roadmap.
   commission, settles the rest to the owner-company on a manual
   operations cycle. (Pelecard split-payment to owner is `feature_flags`
   flagged off and is a future iteration.)
-- **Total amount = (monthly_rent × months) + OZ commission** (5% of
-  rent total). Snapshot stored on the booking row at request time.
+- **Total amount = (monthly_rent_per_bed × bed_count × months) + OZ commission** (3% of
+  rent total per DECISIONS_LOG 2026-05-12; the original 5% line below is superseded). Snapshot stored on the booking row at request time.
 
 ### Contract: HelloSign with standardized lease
 
@@ -4730,7 +4732,7 @@ export default function SignUpPage() {
 
       <div className={styles.choices}>
         <Button variant="cta" fullWidth onClick={() => setPersona('company')}>
-          חברה לניהול נכסים
+          מנהל נכס
         </Button>
         <Button variant="cta" fullWidth onClick={() => setPersona('corporation')}>
           תאגיד בנייה
@@ -5142,7 +5144,7 @@ kill $DEV_PID 2>/dev/null
 PASS iff:
 - Both codes are `200`
 - `/tmp/oz-signin.html` contains `lang="he"`, `dir="rtl"`, `המשך עם Google`, `שלחו לי קישור התחברות`, `שלחו לי קוד SMS`
-- `/tmp/oz-signup.html` contains `חברה לניהול נכסים`, `אני בעל נכס פרטי`
+- `/tmp/oz-signup.html` contains `מנהל נכס`, `אני בעל נכס פרטי`
 - `/tmp/oz-dev.log` contains no `Error:` or `Failed to compile`
 
 ### Test E — Middleware exists and matcher excludes static assets
@@ -5254,9 +5256,9 @@ Build the entire MVP product surface end-to-end. By the end of Phase 4, the foll
 3. Filters by city, capacity, price → clicks a listing → arrives at `/listings/[id]`
 4. Wants to book → clicks **"בקשו לשריין"** → prompted to sign in or sign up
 5. Signs up as a `construction_corporation` → returns to listing detail
-6. Submits a booking request with date range and number of workers
+6. Submits a booking request with start date + duration in months (1–12); full apartment — see DECISIONS_LOG 2026-05-13 "MVP leasing model: full property only" and "Booking form inputs: start_date + duration_months"
 7. **Owner-company** receives email notification, logs in, accepts the request from their bookings list
-8. **System generates a Pelecard Link b'Click** for `(monthly_rent × months) + OZ commission` and emails it to the corporation
+8. **System generates a Pelecard Link b'Click** for `(monthly_rent_per_bed × bed_count × months) + OZ commission` and emails it to the corporation
 9. Corporation pays through Pelecard checkout
 10. Webhook fires → booking moves to `paid`
 11. **System sends HelloSign signature request** to both parties with the standardized lease template, pre-filled with property and booking data
@@ -5340,16 +5342,47 @@ CREATE TABLE public.listings (
   street              text,
   street_number       text,
 
-  -- Capacity & pricing
-  bed_count           smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 50),
+  -- Capacity & pricing.
+  -- DECISIONS_LOG 2026-05-13 (amended same-day): MVP supports full-property
+  -- leases only, but PRICING IS DISPLAYED PER BED. The corporate booking
+  -- pays for the whole apartment — total = monthly_rent_per_bed × bed_count × months.
+  -- There is no partial-apartment booking; bed_count drives both the visible
+  -- per-bed price and the total math.
+  --
+  -- bed_count is now a DENORMALIZED AGGREGATE = SUM(listing_bedrooms.bed_count).
+  -- Populated by the listing-form server action; not hand-entered on the form.
+  -- The CHECK (1..50) still applies as a sanity bound on the resulting sum.
+  bed_count            smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 50),
   monthly_rent_per_bed integer NOT NULL CHECK (monthly_rent_per_bed > 0),  -- in ILS, no decimals
 
-  -- Amenities (extensible; add columns as we discover requirements)
+  -- Property-level fields.
+  -- bedroom_count and bed_count are denormalized aggregates of the child
+  -- listing_bedrooms rows (see table below), populated by the listing-form
+  -- server action at save time. bedroom_count is the count of *bedrooms*
+  -- (חדרי שינה), NOT rooms (חדרים). See DECISIONS_LOG 2026-05-13
+  -- "Per-bedroom data model for תקנות עובדים זרים compliance".
   area_sqm            integer,
+  bedroom_count       smallint,                                     -- = COUNT(listing_bedrooms)
   bathroom_count      smallint,
-  has_kitchen         boolean NOT NULL DEFAULT true,
-  has_wifi            boolean NOT NULL DEFAULT false,
-  has_parking         boolean NOT NULL DEFAULT false,
+
+  -- Facilities — canonical 10-item list locked by DECISIONS_LOG 2026-05-13
+  -- "Facilities list amendment: bunk beds joins the list (10 items);
+  -- answer required, not optional". All columns default false at the DB
+  -- level so inserts always have a value. The first 9 are opt-in via the
+  -- form (unticked = false). has_bunk_beds requires an explicit yes/no
+  -- answer enforced at the form / server-action layer; the DB default of
+  -- false is only used because the column is NOT NULL — the action should
+  -- not insert until the owner has answered.
+  has_ac              boolean NOT NULL DEFAULT false,  -- מזגן
+  has_wifi            boolean NOT NULL DEFAULT false,  -- אינטרנט
+  has_furniture       boolean NOT NULL DEFAULT false,  -- ריהוט
+  has_parking         boolean NOT NULL DEFAULT false,  -- חניה
+  has_kitchen         boolean NOT NULL DEFAULT false,  -- מטבח
+  has_gas_cooking     boolean NOT NULL DEFAULT false,  -- כיריים גז
+  has_living_room     boolean NOT NULL DEFAULT false,  -- סלון
+  has_terrace_yard    boolean NOT NULL DEFAULT false,  -- מרפסת / חצר (single boolean covering either)
+  has_washing_machine boolean NOT NULL DEFAULT false,  -- מכונת כביסה
+  has_bunk_beds       boolean NOT NULL DEFAULT false,  -- מיטות קומותיים (required answer at form layer)
 
   -- Audit
   created_at          timestamptz NOT NULL DEFAULT now(),
@@ -5366,6 +5399,34 @@ CREATE TRIGGER listings_set_updated_at
   BEFORE UPDATE ON public.listings
   FOR EACH ROW
   EXECUTE FUNCTION public.set_updated_at();
+
+-- Listing bedrooms. Per-bedroom area + bed count so the 4 m² regulation
+-- (תקנות עובדים זרים: minimum 4 m² per bed within each bedroom) can be
+-- validated per individual bedroom rather than against a property aggregate.
+-- See DECISIONS_LOG 2026-05-13 "Per-bedroom data model for תקנות עובדים זרים
+-- compliance".
+--
+-- listings.bedroom_count = COUNT(listing_bedrooms WHERE listing_id = ?)
+-- listings.bed_count     = SUM(listing_bedrooms.bed_count WHERE listing_id = ?)
+-- Both aggregates are populated by the listing-form server action at save
+-- time; no DB triggers — the server action is the single writer.
+CREATE TABLE public.listing_bedrooms (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  listing_id    uuid NOT NULL REFERENCES public.listings(id) ON DELETE CASCADE,
+  display_order smallint NOT NULL DEFAULT 0,
+  -- Bedroom area in square metres. numeric(5,2) admits 999.99 m² with two
+  -- decimals so owners can enter e.g. 12.5 m². Whole-number entries are fine.
+  size_sqm      numeric(5,2) NOT NULL CHECK (size_sqm > 0),
+  -- Beds in this specific bedroom. The per-bedroom regulation check is
+  -- `size_sqm >= 4 * bed_count`. CHECK BETWEEN 1 AND 12 because more than
+  -- 12 beds in a single bedroom is implausible and almost certainly a
+  -- data-entry error.
+  bed_count     smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 12),
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX listing_bedrooms_listing_idx
+  ON public.listing_bedrooms(listing_id, display_order);
 
 -- Listing images. Stored in Supabase Storage (bucket: 'listing-images'),
 -- this table holds the path + display order.
@@ -5857,10 +5918,15 @@ const EMPTY: ListingFormValues = {
   bed_count: 8,
   monthly_rent_per_bed: 1200,
   area_sqm: undefined,
+  bedroom_count: undefined,
   bathroom_count: undefined,
   has_kitchen: true,
+  has_living_room: false,
   has_wifi: false,
   has_parking: false,
+  has_ac: false,
+  has_gas_cooking: false,
+  has_bunk_beds: false,
 };
 
 export function ListingForm({ initial, listingId }: ListingFormProps) {
@@ -5960,13 +6026,24 @@ export function ListingForm({ initial, listingId }: ListingFormProps) {
           value={String(values.bathroom_count ?? '')}
           onChange={e => update('bathroom_count', e.target.value ? parseInt(e.target.value) : undefined)}
         />
+        {/* DECISIONS_LOG 2026-05-13: bedrooms (חדרי שינה), NOT rooms (חדרים). */}
+        <Input
+          type="number"
+          label="מספר חדרי שינה"
+          value={String(values.bedroom_count ?? '')}
+          onChange={e => update('bedroom_count', e.target.value ? parseInt(e.target.value) : undefined)}
+        />
       </div>
 
       <div className={styles.amenities}>
         <h3>מתקנים</h3>
         <label><input type="checkbox" checked={values.has_kitchen} onChange={e => update('has_kitchen', e.target.checked)} /> מטבח</label>
+        <label><input type="checkbox" checked={values.has_living_room} onChange={e => update('has_living_room', e.target.checked)} /> סלון</label>
         <label><input type="checkbox" checked={values.has_wifi} onChange={e => update('has_wifi', e.target.checked)} /> אינטרנט</label>
         <label><input type="checkbox" checked={values.has_parking} onChange={e => update('has_parking', e.target.checked)} /> חניה</label>
+        <label><input type="checkbox" checked={values.has_ac} onChange={e => update('has_ac', e.target.checked)} /> מזגן</label>
+        <label><input type="checkbox" checked={values.has_gas_cooking} onChange={e => update('has_gas_cooking', e.target.checked)} /> כיריים גז</label>
+        <label><input type="checkbox" checked={values.has_bunk_beds} onChange={e => update('has_bunk_beds', e.target.checked)} /> מיטות קומותיים</label>
       </div>
 
       <div className={styles.descGroup}>
@@ -6007,10 +6084,17 @@ export interface ListingFormValues {
   bed_count: number;
   monthly_rent_per_bed: number;
   area_sqm: number | undefined;
+  // bedroom_count is bedrooms (חדרי שינה), NOT rooms (חדרים).
+  // DECISIONS_LOG 2026-05-13.
+  bedroom_count: number | undefined;
   bathroom_count: number | undefined;
   has_kitchen: boolean;
+  has_living_room: boolean;
   has_wifi: boolean;
   has_parking: boolean;
+  has_ac: boolean;
+  has_gas_cooking: boolean;
+  has_bunk_beds: boolean;
 }
 
 export interface ListingFormProps {
@@ -6130,10 +6214,15 @@ export default async function EditListingPage({ params }: { params: Promise<{ id
             bed_count: data.bed_count,
             monthly_rent_per_bed: data.monthly_rent_per_bed,
             area_sqm: data.area_sqm ?? undefined,
+            bedroom_count: data.bedroom_count ?? undefined,
             bathroom_count: data.bathroom_count ?? undefined,
             has_kitchen: data.has_kitchen,
+            has_living_room: data.has_living_room,
             has_wifi: data.has_wifi,
             has_parking: data.has_parking,
+            has_ac: data.has_ac,
+            has_gas_cooking: data.has_gas_cooking,
+            has_bunk_beds: data.has_bunk_beds,
           }}
         />
       </div>
@@ -6197,6 +6286,12 @@ CREATE TABLE public.bookings (
 
   status              public.booking_status NOT NULL DEFAULT 'requested',
   start_date          date NOT NULL,
+  -- duration_months is what the corporate user actually picks on the booking
+  -- form (1–12). end_date is server-derived as start_date + duration_months
+  -- so the availability-overlap query keeps working without a generated
+  -- column. See DECISIONS_LOG 2026-05-13 "Booking form inputs: start_date +
+  -- duration_months".
+  duration_months     smallint NOT NULL CHECK (duration_months BETWEEN 1 AND 12),
   end_date            date NOT NULL CHECK (end_date > start_date),
   worker_count        smallint NOT NULL CHECK (worker_count >= 1),
 
@@ -6214,7 +6309,10 @@ CREATE TABLE public.bookings (
   hellosign_request_id     text,
   contract_signed_at       timestamptz,
 
-  -- Notes from corporation when requesting
+  -- Notes from corporation when requesting.
+  -- Column kept in schema (IRON_RULE 3 — no destructive drops on the path
+  -- to MVP) but the booking form no longer asks for a message per
+  -- DECISIONS_LOG 2026-05-13. Stays NULL on inserts from the MVP UI.
   request_message     text,
 
   created_at          timestamptz NOT NULL DEFAULT now(),
@@ -6313,7 +6411,7 @@ export default async function HomePage() {
             קבלני בנייה: מצאו דיור מאומת תוך 48 שעות.<br/>
             בעלי נכסים: הגדילו הכנסה ב-80%+ ממחיר שוק.
           </p>
-          <p className={styles.terms}>ללא עלות לקבלן · 5% עמלה מבעל הנכס · חשבונית מס</p>
+          <p className={styles.terms}>ללא עלות לקבלן · 3% עמלה מבעל הנכס · חשבונית מס</p>
           <div className={styles.heroActions}>
             <Link href="/listings"><Button variant="cta" size="lg">חפש נכס מתאים</Button></Link>
             <Link href="/sign-up"><Button variant="ghost" size="lg">פרסם נכס</Button></Link>
@@ -6348,9 +6446,9 @@ export default async function HomePage() {
       {/* STATS */}
       <section className={styles.statsSection}>
         <Stat icon="users" big="90,000" label="עובדים זרים בבנייה" />
-        <Stat icon="percent" big="5%" label="עמלה מבעל הנכס" />
+        <Stat icon="percent" big="3%" label="עמלה מבעל הנכס" />
         <Stat icon="clock" big="48h" label="זמן מענה מקסימלי" />
-        <Stat icon="ruler" big='4 מ"ר' label="לעובד — חוקי" />
+        <Stat icon="ruler" big='4 מ"ר' label="למיטה (לפי חדר שינה)" />
       </section>
 
       {/* LISTINGS PREVIEW */}
@@ -6363,7 +6461,7 @@ export default async function HomePage() {
                 <div className={styles.previewBody}>
                   <h3>{l.title}</h3>
                   <p>📍 {l.city}</p>
-                  <p>{l.bed_count} מיטות · ₪{l.monthly_rent_per_bed.toLocaleString('he-IL')}/מיטה</p>
+                  <p>{l.bed_count} מיטות · ₪{l.monthly_rent_per_bed.toLocaleString('he-IL')} / מיטה</p>
                 </div>
               </Link>
             ))}
@@ -6391,7 +6489,7 @@ export default async function HomePage() {
       {/* LEGAL CALLOUT */}
       <section className={styles.legal}>
         <h3>⚖️ חוק עובדים זרים מחייב דיור הולם</h3>
-        <p>כל מעסיק חייב לספק דיור העומד בתקנות: מינימום 4 מ״ר לעובד, שירותים ומקלחות לפי יחס קבוע. אי עמידה בתקנות — עבירה פלילית.</p>
+        <p>כל מעסיק חייב לספק דיור העומד בתקנות: מינימום 4 מ״ר לכל מיטה בכל חדר שינה (חישוב לפי חדר, לא לפי ממוצע בנכס — חדר עם 3 מיטות חייב להיות לפחות 12 מ״ר), שירותים ומקלחות לפי יחס קבוע. אי עמידה בתקנות — עבירה פלילית.</p>
         <Link href="/listings"><Button variant="ghost">לנכסים מאומתים ←</Button></Link>
       </section>
 
@@ -6408,7 +6506,7 @@ export default async function HomePage() {
         <Faq q="האם הנכסים מאושרים על ידי הרשויות?" a="כל הנכסים מתפרסמים תחת הצהרת הבעלים. נכסים שעברו ביקורת מסמכים נושאים תג אימות." />
         <Faq q="כמה זמן לוקח למצוא נכס מתאים?" a="הזמן הממוצע משריון לחתימה הוא 3-5 ימי עסקים." />
         <Faq q="האם יש חוזה שכירות מסודר?" a="כן. אנחנו מספקים חוזה שכירות תקני שעובר חתימה דיגיטלית של שני הצדדים." />
-        <Faq q="מה עלות השירות?" a="לקבלן: ללא עלות. לבעל הנכס: 5% עמלה מסכום השכירות החודשית." />
+        <Faq q="מה עלות השירות?" a="לקבלן: ללא עלות. לבעל הנכס: 3% עמלה מסכום השכירות החודשית." />
       </section>
 
       {/* FOOTER */}
@@ -6581,7 +6679,7 @@ export default async function ListingsPage({ searchParams }: { searchParams: Pro
                   <span>{l.bed_count} מיטות</span>
                   {l.area_sqm ? <span>{l.area_sqm} מ״ר</span> : null}
                 </div>
-                <p className={styles.price}>₪{l.monthly_rent_per_bed.toLocaleString('he-IL')}<span>/מיטה</span></p>
+                <p className={styles.price}>₪{l.monthly_rent_per_bed.toLocaleString('he-IL')}<span> / מיטה</span></p>
                 <VerificationPill level={l.verification_level} />
               </div>
             </Card>
@@ -6665,7 +6763,7 @@ export default async function ListingDetailPage({ params }: { params: Promise<{ 
             {listing.has_wifi ? <li>אינטרנט</li> : null}
             {listing.has_parking ? <li>חניה</li> : null}
           </ul>
-          <p className={styles.price}>₪{listing.monthly_rent_per_bed.toLocaleString('he-IL')}<span>/מיטה/חודש</span></p>
+          <p className={styles.price}>₪{listing.monthly_rent_per_bed.toLocaleString('he-IL')}<span> / מיטה / חודש</span></p>
           {listing.description ? <p>{listing.description}</p> : null}
         </Card>
 
@@ -6702,7 +6800,15 @@ import { Button } from '@/components/primitives/Button/Button';
 import { Input } from '@/components/primitives/Input/Input';
 import { createBrowserClient } from '@/lib/supabase/browser';
 
-const OZ_COMMISSION_RATE = 0.05;  // 5% per existing brand language. Move to feature_flags or a config table in Phase 5 if it changes.
+const OZ_COMMISSION_RATE = 0.03;  // 3% per DECISIONS_LOG 2026-05-12. Move to feature_flags or a config table in Phase 5 if it changes again.
+
+// DECISIONS_LOG 2026-05-13: MVP is full-property leases only — the
+// corporation pays for the WHOLE apartment. Price is displayed PER BED
+// (`/ מיטה`); total derives as monthly_rent_per_bed × bed_count ×
+// duration_months + 3% commission. No worker-count input. The form takes
+// TWO inputs only — start_date + duration_months (1–12). end_date is
+// server-computed; no message input. The insert runs in a server action
+// so the corp can't tamper with end_date or the totals.
 
 interface Props {
   listing: {
@@ -6714,78 +6820,106 @@ interface Props {
 }
 
 export function BookingRequestForm({ listing }: Props) {
-  const supabase = createBrowserClient();
   const router = useRouter();
   const [start, setStart] = useState('');
-  const [end, setEnd] = useState('');
-  const [workers, setWorkers] = useState(listing.bed_count);
-  const [message, setMessage] = useState('');
+  const [duration, setDuration] = useState<number>(1); // months, 1–12
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const months = monthsBetween(start, end);
-  const monthlyRent = workers * listing.monthly_rent_per_bed;
-  const totalRent = monthlyRent * months;
+  const valid = !!start && duration >= 1 && duration <= 12;
+  const monthlyRentForProperty = listing.monthly_rent_per_bed * listing.bed_count;
+  const totalRent = monthlyRentForProperty * duration;
   const commission = Math.round(totalRent * OZ_COMMISSION_RATE);
   const total = totalRent + commission;
 
   async function submit() {
     setError(null);
     setBusy(true);
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) { setError('יש להתחבר מחדש'); setBusy(false); return; }
-
-    const { data, error: e } = await supabase.from('bookings').insert({
+    // Server action — see app/actions/createBooking.ts. Computes end_date,
+    // worker_count, monthly_rent_total, oz_commission, total_amount server-
+    // side so the corp can't tamper with derived values.
+    const result = await createBookingAction({
       listing_id: listing.id,
-      corporation_id: user.id,
-      owner_id: listing.owner_id,
       start_date: start,
-      end_date: end,
-      worker_count: workers,
-      monthly_rent_total: totalRent,
-      oz_commission: commission,
-      total_amount: total,
-      request_message: message || null,
-    }).select().single();
+      duration_months: duration,
+    });
 
-    if (e) { setError(e.message); setBusy(false); return; }
-
+    if (!result.ok) { setError(result.error); setBusy(false); return; }
     router.push('/bookings/corporation');
   }
 
   return (
     <div>
       <h3>בקשת שריון</h3>
+      <p className="muted">שריון הדירה השלמה ({listing.bed_count} מיטות) — בחר תאריך התחלה ומשך השכירות.</p>
       <Input type="date" label="תאריך התחלה" value={start} onChange={e => setStart(e.target.value)} />
-      <Input type="date" label="תאריך סיום" value={end} onChange={e => setEnd(e.target.value)} />
-      <Input type="number" label="מספר עובדים" value={String(workers)} onChange={e => setWorkers(parseInt(e.target.value) || 0)} />
-      <textarea placeholder="הודעה לבעל הנכס (אופציונלי)" value={message} onChange={e => setMessage(e.target.value)} />
+      <Input
+        type="number"
+        label="משך השכירות (חודשים)"
+        min={1}
+        max={12}
+        value={String(duration)}
+        onChange={e => setDuration(Math.max(1, Math.min(12, parseInt(e.target.value) || 1)))}
+      />
 
-      {months > 0 && workers > 0 ? (
+      {valid ? (
         <div>
-          <p>חודשים: {months}</p>
+          <p>חודשים: {duration}</p>
+          <p>מחיר למיטה: ₪{listing.monthly_rent_per_bed.toLocaleString('he-IL')} × {listing.bed_count} מיטות = ₪{monthlyRentForProperty.toLocaleString('he-IL')} / חודש</p>
           <p>שכירות: ₪{totalRent.toLocaleString('he-IL')}</p>
-          <p>עמלת עוז (5%): ₪{commission.toLocaleString('he-IL')}</p>
+          <p>עמלת עוז (3%): ₪{commission.toLocaleString('he-IL')}</p>
           <p><strong>סה״כ: ₪{total.toLocaleString('he-IL')}</strong></p>
         </div>
       ) : null}
 
       {error ? <p className="error">{error}</p> : null}
 
-      <Button variant="cta" onClick={submit} disabled={busy || !start || !end || workers <= 0}>
+      <Button variant="cta" onClick={submit} disabled={busy || !valid}>
         {busy ? 'שולח…' : 'שלח בקשה'}
       </Button>
     </div>
   );
 }
 
-function monthsBetween(start: string, end: string): number {
-  if (!start || !end) return 0;
-  const s = new Date(start);
-  const e = new Date(end);
-  const days = (e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24);
-  return Math.ceil(days / 30);
-}
+// createBookingAction (server action — sketch):
+// "use server";
+// import { addMonths, formatISO } from 'date-fns';
+// import { createServerActionClient } from '@/lib/supabase/server';
+//
+// export async function createBookingAction(input: {
+//   listing_id: string; start_date: string; duration_months: number;
+// }) {
+//   if (input.duration_months < 1 || input.duration_months > 12)
+//     return { ok: false, error: 'משך השכירות חייב להיות בין 1 ל-12 חודשים' };
+//
+//   const supabase = await createServerActionClient();
+//   const { data: { user } } = await supabase.auth.getUser();
+//   if (!user) return { ok: false, error: 'יש להתחבר מחדש' };
+//
+//   const { data: listing } = await supabase
+//     .from('listings')
+//     .select('owner_id, monthly_rent_per_bed, bed_count')
+//     .eq('id', input.listing_id).single();
+//   if (!listing) return { ok: false, error: 'הנכס לא נמצא' };
+//
+//   const end_date = formatISO(addMonths(new Date(input.start_date), input.duration_months), { representation: 'date' });
+//   const monthly_rent_total = listing.monthly_rent_per_bed * listing.bed_count * input.duration_months;
+//   const oz_commission = Math.round(monthly_rent_total * 0.03);
+//
+//   const { error } = await supabase.from('bookings').insert({
+//     listing_id: input.listing_id,
+//     corporation_id: user.id,
+//     owner_id: listing.owner_id,
+//     start_date: input.start_date,
+//     duration_months: input.duration_months,
+//     end_date,
+//     worker_count: listing.bed_count, // stamped; booking covers the whole apartment
+//     monthly_rent_total,
+//     oz_commission,
+//     total_amount: monthly_rent_total + oz_commission,
+//   });
+//   return error ? { ok: false, error: error.message } : { ok: true };
+// }
 ```
 
 ### Step 6 — Bookings list views
@@ -6845,7 +6979,7 @@ This checkpoint integrates two third-party services and wires the full booking s
 
 5. **Booking status transitions** — server actions that enforce valid state machine: `requested → accepted | rejected`; `accepted → paid` (via Pelecard webhook only); `paid → confirmed` (via HelloSign webhook only); cancellation possible from any pre-paid state.
 
-6. **Standardized lease template** — Hebrew RTL Word/PDF template stored in `templates/lease.docx`, with placeholders for `{{owner_name}}`, `{{corporation_name}}`, `{{property_address}}`, `{{start_date}}`, `{{end_date}}`, `{{monthly_rent}}`, `{{worker_count}}`, etc. HelloSign fills these from booking data.
+6. **Standardized lease template** — Hebrew RTL Word/PDF template stored in `templates/lease.docx`, with placeholders for `{{owner_name}}`, `{{corporation_name}}`, `{{property_address}}`, `{{start_date}}`, `{{duration_months}}` (corp-entered 1–12), `{{end_date}}` (server-derived from start + duration), `{{monthly_rent_per_bed}}` (per-bed price as listed), `{{bed_count}}` (apartment capacity), `{{monthly_rent_total}}` (per-bed × bed_count — the contractual monthly rent for the whole apartment per DECISIONS_LOG 2026-05-13), `{{worker_count}}` (capacity, sourced from `listings.bed_count` since the corp doesn't enter it), etc. HelloSign fills these from booking + listing data.
 
 ### Required environment values for CP-4c
 

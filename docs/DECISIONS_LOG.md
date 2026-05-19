@@ -146,7 +146,7 @@ Every locked product decision, with date and rationale. Append-only — when a d
 
 **Context:** Tier 3 = paid on-site inspection (₪750 / ₪500 re-visit).
 **Decision:** Levels 1 (default) + 2 (remote attestation) are MVP. Level 3 is future. (Note: oz-marketplace renames "tier" → `verification_level`; see CP-1 OQ-6.)
-**Status:** ✅ Locked
+**Status:** 🔄 Superseded by 2026-05-12 — Levels 1 and 2 are also now deferred. The full verification system is out of MVP.
 
 ---
 
@@ -324,7 +324,8 @@ Original BUILD_PLAN had eight phases including a corporate dashboard
 
 **Deferred (not in MVP):** corporate dashboard, B2C / individual-owner
 product, native hostel booking engine, yield calculator, AI Import,
-virtual tours, ratings, Tier-3 verification, Neema integration, premium
+virtual tours, ratings, Tier-3 verification (and later, per 2026-05-12,
+the entire verification system — all levels), Neema integration, premium
 listing tiers.
 
 **"Production-ready" means production-ready** — no half-built features
@@ -390,6 +391,7 @@ Logged in `TASKS.md` Future-roadmap.
   flagged off and is a future iteration.)
 - **Total amount = (monthly_rent × months) + OZ commission** (5% of
   rent total). Snapshot stored on the booking row at request time.
+  🔄 *The 5% rate is superseded by the 2026-05-12 entry below — MVP charges 3%.*
 
 ### Contract: HelloSign with standardized lease
 
@@ -408,6 +410,1144 @@ Per the existing workerhome.co.il pattern: hero + hostels strip +
 listings preview + how-it-works + FAQ + footer. Public, no auth gate
 on browse. Dropped from the existing site for MVP scope: B2C section,
 yield calculator, testimonials, Tier-3 verification badges.
+
+---
+
+## 2026-05-12 — Verification system (all levels) deferred from MVP
+
+**Context:** Earlier rescope (2026-04-30 + 2026-05-06) deferred only Tier 3
+(paid on-site inspection) and kept Levels 1 (self-reported owner identity)
+and 2 (remote attestation) as in-scope for MVP. The verification system
+remained surfaced on listing cards via `VerificationLevelBadge`, and the
+Phase 4 visual rebuild shipped a verification pill on every listing card
+(`ListingCard` overlay, `LAYOUT_INSPIRATION §5`).
+
+**Decision:** The entire verification system — Levels 1, 2, and 3 — is
+deferred from MVP. No tier of verification ships in the first launch.
+
+**Rationale:**
+
+- Level-2 attestation requires an ops review flow (document upload,
+  reviewer queue, evidence storage) that doesn't exist and isn't worth
+  building before we have listings volume to review.
+- Showing a "Level 1 — self-reported" badge with no path to upgrade
+  signals weakness rather than trust. Better to ship no badge than a
+  badge that reads as "the owner says so."
+- Trust signals in MVP come from: KYC at sign-up (owner-company has
+  Israeli company registration), the contract flow (HelloSign signed
+  lease), and Pelecard's regulated payment rail. Verification can be
+  layered in once the marketplace has real listing volume and we know
+  what level of trust signal corporations actually need.
+
+**Implications:**
+
+- `listings.verification_level` column stays in the schema (Phase 4
+  migration `20260506000001_listings_schema.sql` already shipped) with
+  default `1`. Not removed — keeping the column is cheap and avoids a
+  destructive migration; surfacing it post-MVP is a UI-only change.
+- `feature_flags.listing.tier3_verification = false` (seeded by the same
+  migration) is now joined by an implicit "all verification disabled in
+  MVP" — no flag added; the UI simply doesn't render the badge.
+- `VerificationLevelBadge` primitive (Phase 1) stays in the codebase as
+  dead code until verification work resumes. Do not delete.
+- `ListingCard` should drop the verification pill overlay. The vacancy
+  pill remains. See follow-up task in `TASKS.md`.
+- `LAYOUT_INSPIRATION.md §5` reconstructed-card pattern is updated to
+  reflect "vacancy pill only" for MVP.
+- `GLOSSARY.md` entry for "Verification level" is marked deferred.
+- BUILD_PLAN §3.D, §3.F deferred list, §5 component map, §8 future-
+  roadmap list, and TASKS.md future-roadmap section are updated.
+
+**Status:** ✅ Locked. Supersedes the 2026-04-30 "Tier 3 deferred" entry
+to the extent that Tiers 1 and 2 are now also deferred.
+
+---
+
+## 2026-05-12 — OZ commission rate: 3% (MVP)
+
+**Context:** The 2026-05-06 entry locked the commission at 5% of the rent
+total. The PROMPT_LIBRARY spec, the shipped homepage copy
+(`app/page.tsx`), and the in-flight `BookingRequestForm` all reference
+5%.
+
+**Decision:** For the first MVP — and until explicitly changed in a
+future entry — OZ charges **3%** commission on rent total, not 5%.
+
+**Implications:**
+
+- `OZ_COMMISSION_RATE` constant moves from `0.05` → `0.03`. Currently
+  hardcoded in `app/listings/[id]/BookingRequestForm.tsx`; should also
+  move to a single source (config table or `feature_flags`-adjacent
+  table) so it's not duplicated across UI strings — but for MVP, hand-
+  update the constant and the two homepage copy strings is acceptable.
+- Hebrew copy referencing "5% עמלה" needs to flip to "3% עמלה":
+  - `app/page.tsx` hero terms line (~line 49)
+  - `app/page.tsx` FAQ ("מה עלות השירות?") (~line 135)
+  - `app/listings/[id]/BookingRequestForm.tsx` summary row label
+- `PROMPT_LIBRARY.md` Phase 4 CP-4c spec is amended to 3%.
+- The booking row snapshot still stores the absolute `oz_commission`
+  amount in agorot, not a rate — historical bookings remain accurate
+  if/when the rate changes again.
+
+**Rationale:** Business-side direction; lowers friction for owner-
+companies during the pilot. Easy to revisit once we have transaction
+volume to validate margin.
+
+**Status:** ✅ Locked. Supersedes the rate stated in the 2026-05-06
+"Payments + commission flow" entry above (3% replaces 5%); all other
+elements of that entry (Pelecard Link b'Click, money flow A, snapshot
+on booking row) stand.
+
+---
+
+## 2026-05-12 — Fire-safety amenity: deferred, definition locked
+
+**Context:** Earlier specs (legacy `properties` schema and the foreign-
+worker regulations summary in `GLOSSARY.md`) reference fire safety as a
+compliance-relevant property attribute. The current
+`listings` schema has no fire-safety column. The definition of
+"fire-safe" hasn't been pinned down anywhere in `docs/`.
+
+**Decision:**
+
+- **Definition:** a property is "fire-safe" iff it has **a smoke/heat
+  detector AND a fire extinguisher**. Both required; neither alone
+  counts.
+- **Out of MVP:** no `has_fire_safety` (or equivalent) column is added
+  to `listings` in MVP, and no fire-safety amenity surface ships on
+  listing creation, listing detail, or marketplace filters.
+- **Future iteration:** add the amenity in a later iteration alongside
+  the existing extensible amenity set (`has_kitchen`, `has_wifi`,
+  `has_parking` in `listings`). When added: boolean column
+  `has_fire_safety` with default `false`; Hebrew label "בטיחות אש
+  (גלאי עשן + מטף)"; surfaced as a filter on `/listings` and as a
+  badge/pill on the listing detail page.
+
+**Rationale:** Fire-safety is a meaningful trust signal for foreign-
+worker housing (per `תקנות עובדים זרים`), but it requires owner self-
+attestation discipline and ideally a verification path to be credible
+— and verification is itself deferred per 2026-05-12. Shipping a self-
+reported boolean today with no path to validate it would be misleading.
+Better to add it when we have the broader trust framework to support
+it.
+
+**Implications:**
+
+- `GLOSSARY.md` gets a new "Fire-safe (property amenity)" entry with
+  the definition and deferral note.
+- `TASKS.md` future-roadmap gets an entry for "Add fire-safety
+  amenity to listings (definition: smoke detector + fire
+  extinguisher)".
+- `BUILD_PLAN.md` §3.F deferred list is not updated — the amenity is
+  small enough that it sits under "extensible amenity set" in
+  `listings` and doesn't need top-level mention. It's tracked in
+  `TASKS.md` instead.
+- `GLOSSARY.md` `תקנות עובדים זרים` entry already mentions "fire
+  safety" as a regulatory requirement — that stays correct (the
+  regulation requires it; we just don't expose it as a structured
+  attribute yet).
+
+**Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — Listing fields: bedrooms (not rooms) + four amenities
+
+**Context:** The current `listings` schema (Phase 4 migration shipped)
+captures `bed_count`, `area_sqm`, `bathroom_count`, and three amenity
+booleans (`has_kitchen`, `has_wifi`, `has_parking`). The owner listing
+form mirrors those fields. The spec is missing several attributes that
+matter to construction-corporation buyers when evaluating a property
+for foreign-worker housing.
+
+**Decision:** Add the following fields to `listings` and to the owner
+listing-creation/edit form.
+
+**Bedrooms — not rooms.** The owner is asked **"how many *bedrooms*"**
+(`חדרי שינה`), not "how many *rooms*" (`חדרים`). This distinction is
+load-bearing in Israeli real-estate vocabulary: a "4-room apartment"
+(`דירת 4 חדרים`) conventionally means 3 bedrooms + 1 living room.
+Counting rooms inflates the number and is ambiguous; counting bedrooms
+is unambiguous and matches the buyer's actual question (how many
+sleeping spaces can I configure?).
+
+**New columns:**
+
+| Column | Type | Default | Hebrew label |
+|---|---|---|---|
+| `bedroom_count` | `smallint` (nullable) | — | `מספר חדרי שינה` |
+| `has_living_room` | `boolean NOT NULL` | `false` | `סלון` |
+| `has_bunk_beds` | `boolean NOT NULL` | `false` | `מיטות קומותיים` |
+| `has_ac` | `boolean NOT NULL` | `false` | `מזגן` |
+| `has_gas_cooking` | `boolean NOT NULL` | `false` | `כיריים גז` |
+
+Sits alongside existing extensible amenities. `bedroom_count` is
+nullable (same pattern as `bathroom_count`) — not every owner will fill
+it in immediately, and we don't want to block listing creation on it.
+
+**Naming notes:**
+
+- `bedroom_count`, **never** `room_count` / `rooms` / `room_amount`.
+  If someone proposes a "number of rooms" field in the future, push
+  back and confirm whether they actually mean bedrooms (almost always
+  yes) — and use `bedroom_count`.
+- `has_ac` (not `has_air_conditioning`) for symmetry with `has_wifi`.
+- `has_gas_cooking` captures specifically a gas stovetop / `כיריים גז`
+  (the common Israeli kitchen setup). A future iteration can add
+  `has_electric_cooking` if induction/electric becomes relevant.
+- `has_bunk_beds` is a boolean for now ("does the unit have bunk beds
+  available?"). Could become a count if owners need to express
+  capacity precisely; revisit when there's actual feedback.
+
+**Implications:**
+
+- New migration adds the five columns to `listings`. Existing rows
+  backfill: `bedroom_count = NULL`, the four booleans = `false`.
+- `app/owner/_components/ListingForm.types.ts` adds the five fields
+  to `ListingFormValues`.
+- `app/owner/_components/ListingForm.tsx` adds:
+  - one numeric input for `bedroom_count` (Hebrew label
+    `מספר חדרי שינה`, placeholder hint clarifying it's bedrooms not
+    rooms)
+  - four checkbox amenities (`סלון`, `מיטות קומותיים`, `מזגן`,
+    `כיריים גז`) in the existing amenities group
+- `app/owner/listings/[id]/page.tsx` insert/update payloads pass the
+  five new fields.
+- Defaults in `ListingForm.tsx`: `bedroom_count: undefined`,
+  `has_living_room: false`, `has_bunk_beds: false`, `has_ac: false`,
+  `has_gas_cooking: false`.
+- Listing detail (`app/listings/[id]/page.tsx`) and marketplace
+  card/filter surfaces can render these progressively — not required
+  to ship in the same change as the schema/form.
+- `PROMPT_LIBRARY.md` schema block and ListingForm code block are
+  amended.
+
+**Rationale:**
+
+- Construction corporations housing crews want to know how many
+  sleeping spaces a unit has (`bedroom_count`) and whether they can
+  double-up with bunks (`has_bunk_beds`).
+- A/C, gas cooking, and a living room are the three most-asked
+  amenities for crew housing beyond what's already captured
+  (kitchen / wifi / parking).
+- Bedrooms vs rooms is a Hebrew-language trap that has bitten other
+  Israeli proptech products; locking it here so we don't fall into it.
+
+**Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — Audit Pack: Hebrew translation + access rule locked
+
+**Context:** The legacy `worker-housing-platform` mockups
+(`recon/brand/mockups/01-corporate.md`, `00-uncategorized.md`) carry the
+"Audit Pack" feature on the corporate dashboard — a downloadable archive
+of compliance documents for a property. The term appears only in legacy
+mockups; it doesn't yet exist in any active oz-marketplace spec. The
+Hebrew translation and the access rule are locked here so they don't
+drift when the feature ships.
+
+**Decision:**
+
+- **Canonical Hebrew translation:** "Audit Pack" → **`תיק נכס`**. Use
+  this string everywhere — UI labels, button copy, file names, email
+  subject lines, FAQ answers. Don't introduce alternative translations
+  ("חבילת ביקורת", "מסמכי נכס", "ארכיון נכס", etc.) — they fragment
+  the vocabulary.
+- **Access rule:** the audit pack is downloadable **only** by users
+  with role `construction_corporation`, and **only after they have
+  completed a booking for the property in question**. "Completed" means
+  the booking has reached terminal success — `bookings.status =
+  'confirmed'` (signed-by-both contract + paid) and the corporation on
+  the booking is the requesting user.
+- Concretely: corporate user X can download the audit pack for listing
+  Y iff there exists a row in `bookings` where
+  `corporation_id = X.id AND listing_id = Y AND status = 'confirmed'`.
+- Owner-companies (the supply side) cannot download a `תיק נכס` — they
+  own the property and have direct access to the underlying documents.
+- Admins can download any audit pack.
+- Anonymous / unauthenticated users cannot download under any
+  circumstances.
+
+**MVP status:** Out of MVP. The corporate dashboard is itself deferred
+per BUILD_PLAN §3.F (2026-05-06 re-scope), and `תיק נכס` is a
+corporate-dashboard surface. This entry only locks the *vocabulary* and
+the *access rule* so that when the corporate dashboard does ship, both
+are settled inputs. No schema, no route, no component lands in MVP.
+
+**Implications:**
+
+- `GLOSSARY.md` gets a new "Audit Pack (`תיק נכס`)" entry.
+- When the corporate dashboard work begins (future phase, currently in
+  TASKS.md future-roadmap as "Corporate dashboard"), the audit-pack
+  download surface enforces the access rule above, ideally via an RLS
+  policy on the storage bucket (or via a server action that checks the
+  booking before serving the signed URL).
+- The legacy mockup pattern of placing an `ייצא Audit Pack` button on
+  any owner row is no longer correct — the button is only visible/
+  enabled on bookings the corporate user actually owns and that are
+  `confirmed`.
+- Translation in any future PROMPT_LIBRARY entry, BUILD_PLAN section,
+  or UI text must use `תיק נכס` verbatim.
+
+**Rationale:**
+
+- Locking the Hebrew translation prevents future drift. "Audit Pack"
+  is an English term; without a canonical Hebrew, every contributor
+  invents their own translation and the platform's vocabulary
+  fragments. `תיק נכס` ("property file") matches the Israeli legal/
+  real-estate convention for compiled property documentation.
+- Tying the download to a completed booking ensures corporations only
+  access compliance docs for properties they've actually committed to.
+  Pre-booking, the audit pack would be reconnaissance material — not
+  the intended use. Post-`confirmed`, it's a tenant's right to the
+  documentation they need for their own compliance / regulator
+  inquiries.
+
+**Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — תקנות עובדים זרים: 4 m² is per-bed-per-bedroom, never aggregate
+
+**Context:** `GLOSSARY.md` summarized the foreign-workers regulation as
+"minimum 4m² per worker", and homepage copy
+(`app/page.tsx`, `PROMPT_LIBRARY.md` stats strip + legal callout)
+phrased it as "מינימום 4 מ״ר לעובד". Both readings are ambiguous —
+they could be interpreted as "4 m² × workers, anywhere on the property"
+or "4 m² × beds in each bedroom". The legacy schema (recon)
+implemented it as a per-room minimum
+(`rooms.room_size_sqm ≥ beds_count × min_space_per_person_sqm`), but
+that detail never landed in oz-marketplace's active specs or copy.
+
+**Decision:** the rule is **per-bedroom, never aggregate**.
+
+- Every bedroom must provide **at least 4 m² per bed it contains**.
+- A bedroom with N beds must be ≥ (4 × N) m².
+- Examples:
+  - 3 beds → ≥ 12 m²
+  - 5 beds → ≥ 20 m²
+- The minimum is calculated **per individual bedroom**, never averaged
+  across the property. A property with one undersized bedroom fails
+  compliance even if its total area generously exceeds the aggregate
+  threshold.
+
+**Canonical phrasings (use these verbatim):**
+
+- **English:** *"Foreign Workers Regulations require a minimum of 4 m²
+  per bed within each bedroom. A bedroom with N beds must be at least
+  (4 × N) m² (e.g., 3 beds → ≥ 12 m²). This is per-bedroom; it is
+  never averaged across the property."*
+- **Hebrew (long form, legal callout):** *"תקנות עובדים זרים מחייבות
+  מינימום 4 מ״ר לכל מיטה בכל חדר שינה. חדר שינה עם N מיטות חייב להיות
+  לפחות (4 × N) מ״ר — לדוגמה: 3 מיטות → לפחות 12 מ״ר. חישוב לפי חדר,
+  לא לפי ממוצע בנכס."*
+- **Hebrew (short form, stat tile / chip):** *"4 מ״ר / למיטה (לפי
+  חדר שינה)"*. The legacy phrasing "4 מ״ר / לעובד" is dropped; "עובד"
+  was a usability shortcut that has now caused the ambiguity this entry
+  resolves.
+
+**Implications:**
+
+- `GLOSSARY.md` `תקנות עובדים זרים` entry is rewritten with the
+  per-bedroom phrasing.
+- `PROMPT_LIBRARY.md` homepage stats strip (`Stat icon="ruler" big='4
+  מ"ר' label="לעובד — חוקי"`) is updated to use the per-bed-per-room
+  short form.
+- `PROMPT_LIBRARY.md` legal callout sentence is updated to the long
+  form.
+- Shipped homepage copy at `app/page.tsx` legal callout (~line 118) and
+  stats strip use the legacy "מינימום 4 מ״ר לעובד" phrasing — flagged
+  in `TASKS.md` polish backlog for update.
+- Once the listing form's new fields ship (DECISIONS_LOG 2026-05-13 —
+  bedrooms + amenities), this rule is the natural validation target:
+  the marketplace can flag listings where `area_sqm / bedroom_count <
+  4 × (bed_count / bedroom_count)` looks suspicious — though that's a
+  derivation only, not a hard validation, since the actual rule is
+  per-individual-bedroom and the schema doesn't yet break beds down by
+  bedroom (`bed_count` is property-level total). Per-bedroom bed
+  capacity is a future schema extension if precise validation becomes
+  worth it.
+- When verification work eventually resumes (verification system
+  currently deferred, DECISIONS_LOG 2026-05-12), Level 2 remote
+  attestation should specifically confirm that each bedroom's area
+  meets the per-bedroom minimum — not just the property's total area.
+
+**Rationale:**
+
+- The regulation itself is per-bedroom (per the legacy implementation
+  pattern and the way the Ministry of Labor's housing inspectors apply
+  it). Averaging across the property masks bedrooms that are below
+  threshold.
+- The "4 מ״ר לעובד" short form invites the wrong mental model — a
+  buyer counting workers × 4 m² and comparing to total area would
+  conclude many non-compliant properties are compliant. The "לפי
+  מיטה / לפי חדר שינה" reframing matches the actual rule.
+
+**Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — MVP leasing model: full property only, binary availability
+
+> 🔄 **Amended same-day** (see "Leasing-model amendment: per-bed price display, full-property booking" entry below). The booking-model and binary-availability parts of this entry stand; the **pricing display** parts (column rename to `monthly_rent`, "/ מיטה" → "/ חודש" flip) are withdrawn. Price is displayed per-bed; the corp still pays for the whole apartment, total derived as `monthly_rent_per_bed × bed_count × months + 3%`.
+
+
+**Context:** The current schema and UI model bookings at the **bed**
+level — `listings.monthly_rent_per_bed`, `bookings.worker_count`,
+`bookings.monthly_rent_total = workers × per_bed × months`. The booking
+form asks the corporation how many workers it wants to house, and
+listing cards display a fractional vacancy (`available_beds / bed_count`).
+This was inherited from the legacy spec, which envisioned a flexible
+partial-leasing marketplace.
+
+For the first MVP, this is too much surface area for too little payoff.
+Corporations buying foreign-worker housing in Gush Dan overwhelmingly
+take entire apartments. Partial-leasing introduces hard problems
+(occupancy tracking, two-corp coexistence in one unit, per-bed contract
+generation, partial-refund accounting) that we shouldn't solve before
+we know they're worth solving.
+
+**Decision:** **MVP supports full-property leases only.** A booking
+covers the entire listing for a contiguous date range; pricing is
+per-apartment, not per-bed; and availability is a binary "available
+vs leased" per requested date range, not a fractional bed count.
+
+**Concretely:**
+
+- **Pricing model.** Listings have a single price: `monthly_rent`
+  (integer ILS, no decimals). It represents the rent for the **whole
+  apartment per month**, not per bed. The Hebrew label on the listing
+  form becomes "שכירות חודשית לדירה (₪)". The "/מיטה" suffix is dropped
+  everywhere in the UI; the price-anchor on cards/detail reads
+  "₪X,XXX / חודש".
+- **Booking model.** A booking covers the full apartment. The
+  corporate booking form **drops the "number of workers" input** —
+  there's nothing to size against pricing. Total payable =
+  `monthly_rent × months + (monthly_rent × months × 3%)` per
+  DECISIONS_LOG 2026-05-12 commission lock.
+- **Availability model.** For any requested date range, a listing is
+  either **available** or **leased** — binary. A listing is "leased"
+  for a date range if any `bookings` row with that `listing_id` and
+  `status IN ('confirmed', 'paid', 'accepted')` overlaps the range.
+  Otherwise it's "available". No fractional `available_beds`
+  computation; no "3 of 8 beds taken" display.
+- **`bed_count` stays informational.** Construction corporations still
+  care about capacity ("does this apartment fit my 12-person crew?"),
+  so the listing form still asks `bed_count` and the marketplace
+  filter "מינ׳ מיטות" still works. It just doesn't drive pricing or
+  partial bookings.
+
+**Schema implications:**
+
+- Rename `listings.monthly_rent_per_bed` → `listings.monthly_rent`
+  (still `integer NOT NULL CHECK (monthly_rent > 0)`). Existing seed
+  data is pre-launch; values that were "rent per bed" need a manual
+  re-key to "rent for the whole apartment". No data migration logic
+  in the SQL — the rename happens in a new migration; team backfills
+  any test listings by hand.
+- `bookings.worker_count` and `bookings.monthly_rent_total` are no
+  longer driven by the UI. Leave the columns in place for now (don't
+  drop on the path to MVP — destructive migrations get blocked by
+  IRON_RULE 3); the booking flow simply stops populating
+  `worker_count` (or stamps it from `listings.bed_count` as a default
+  for compatibility). `monthly_rent_total` continues to snapshot the
+  contractual rent total, which is now `monthly_rent × months`.
+- No new column is needed for availability — the binary status is
+  derived from `bookings` rows.
+
+**UI implications (a small inventory):**
+
+- `app/owner/_components/ListingForm.tsx` — the numeric input labeled
+  "מחיר למיטה / חודש (₪)" becomes "שכירות חודשית לדירה (₪)";
+  field name `monthly_rent_per_bed` → `monthly_rent`.
+- `app/listings/[id]/BookingRequestForm.tsx` — drop the "מספר עובדים"
+  input entirely; price summary is `שכירות = monthly_rent × months`,
+  `עמלת עוז (3%)`, `סה״כ`.
+- `app/listings/[id]/page.tsx` (public detail) — price-anchor reads
+  `₪X,XXX / חודש`, not `/מיטה/חודש`. `bed_count` stays in the
+  capacity bullet list as "X מיטות".
+- `app/listings/page.tsx` (marketplace) — drop the `maxRent` filter
+  in its current "per-bed" framing or repurpose it to "max monthly
+  rent for apartment". Keep `minBeds`. Card price: `₪X,XXX / חודש`,
+  no `/מיטה`.
+- `app/page.tsx` (homepage) — listings preview card text changes from
+  `{bed_count} מיטות · ₪{monthly_rent_per_bed}/מיטה` to `{bed_count}
+  מיטות · ₪{monthly_rent} / חודש`.
+- `ListingCard` overlay pill — replaces the fractional vacancy with a
+  binary "פנוי" / "מושכר" pill (`Pill tone="green"` for available,
+  `Pill tone="gray"` for leased). The pill is computed against
+  "today" by default, or against the requested date range if the user
+  has filters active. The `lib/supabase/service.ts` service-role
+  aggregator simplifies to a one-line "any overlapping confirmed
+  booking?" check per listing.
+
+**Future (Dreams):** the partial / per-bed / per-worker leasing
+model — the one currently encoded but stripped from MVP — moves to
+`docs/specs/dreams/B2B_DREAMS.md` as "Partial apartment leasing
+(per-bed pricing, multi-corp occupancy)". Schema sketch preserved
+there so it's easy to reconstruct: re-introduce `monthly_rent_per_bed`
+alongside `monthly_rent` (so listings can opt in), keep
+`bookings.worker_count` populated by a real input, add a `bed_holds`
+table for sub-listing inventory, etc. This is the right direction
+once the marketplace has volume; it's the wrong starting position.
+
+**Rationale:**
+
+- Cuts the contract template down to one form (whole-apartment lease),
+  not two (whole vs partial).
+- Cuts the booking math, the availability computation, and the
+  occupancy display each to one line.
+- Cuts the support-burden risk of two corps colliding in one
+  apartment in MVP.
+- Matches actual buyer behavior in the gush-dan pilot scope.
+
+**Status:** ✅ Locked.
+
+---
+
+## 2026-05-13 — Leasing-model amendment: per-bed price display, full-property booking
+
+**Context:** The earlier 2026-05-13 entry "MVP leasing model: full property
+only, binary availability" renamed `listings.monthly_rent_per_bed` →
+`listings.monthly_rent` and flipped all price displays from "/מיטה" to
+"/ חודש". On same-day review, that overshoots: the **booking model** is
+correctly full-property only (no partial / per-bed booking, binary
+availability, no worker-count input), but **price display should remain
+per-bed**. Construction corporations evaluating apartments are used to
+seeing a per-bed price, and the per-bed unit is what makes properties
+comparable when bed counts differ. The total they actually pay is for
+the whole apartment — that's just a derived number, not the headline.
+
+**Decision:**
+
+- **Schema:** keep `listings.monthly_rent_per_bed integer NOT NULL CHECK
+  (monthly_rent_per_bed > 0)`. **Do not** rename to `monthly_rent`. The
+  earlier entry's RENAME COLUMN instruction is withdrawn.
+- **Listing form label:** revert to "מחיר למיטה / חודש (₪)". Field
+  name `monthly_rent_per_bed`.
+- **Price display:**
+  - Listing card price-anchor: `₪X,XXX / מיטה` (large, bold, blue-deep,
+    with "/ מיטה" as the muted suffix). Never the whole-property total
+    on the card.
+  - Marketplace card line: `{bed_count} מיטות · ₪{monthly_rent_per_bed} / מיטה`.
+  - Listing detail price-anchor: `₪X,XXX / מיטה / חודש`.
+  - Marketplace filter: "מחיר מקסימלי למיטה" (number input), filtered
+    via `monthly_rent_per_bed`.
+- **Booking model (unchanged from the original entry):** the booking
+  covers the **entire apartment** — there is no partial / per-bed
+  booking, no worker-count input. The corporation enters dates only.
+- **Booking math:** total payable =
+  `(monthly_rent_per_bed × bed_count × months) + 3% commission`.
+  The booking summary on the request form spells the multiplication
+  out so the corp sees what they're paying for:
+  - חודשים: N
+  - מחיר למיטה: ₪X × Y מיטות = ₪Z / חודש
+  - שכירות: ₪(Z × N)
+  - עמלת עוז (3%): ₪commission
+  - סה״כ: ₪total
+- **Booking row snapshot:** `bookings.monthly_rent_total` is the
+  derived `monthly_rent_per_bed × bed_count × months` (in agorot, no
+  decimals). `bookings.worker_count` is stamped from `listings.bed_count`
+  at request time (corp doesn't enter it; booking is whole-apartment).
+- **Availability (unchanged from the original entry):** binary `פנוי` /
+  `מושכר` per date range. No fractional vacancy.
+- **`bed_count` (unchanged):** stays as informational capacity AND now
+  also drives the visible per-bed → total math. The marketplace
+  "מינ׳ מיטות" filter still works.
+
+**Implications:**
+
+- The earlier entry's "schema implications" RENAME-COLUMN bullet is
+  withdrawn. The column keeps its original name.
+- The earlier entry's "UI implications" bullets that said price displays
+  drop "/ מיטה" are withdrawn; "/ מיטה" stays on cards/detail/filter.
+- `PROMPT_LIBRARY.md` is reverted to per-bed displays and the
+  BookingRequestForm spec now derives the total as per-bed × bed_count
+  × months.
+- `GLOSSARY.md` "Full-property lease" entry is amended to clarify the
+  display-vs-booking split.
+- The standardized HelloSign lease template uses both placeholders:
+  `{{monthly_rent_per_bed}}` (the listed per-bed price) and
+  `{{monthly_rent_total}}` (the per-bed × bed_count contractual
+  monthly rent). `{{bed_count}}` is the apartment capacity.
+
+**Rationale:**
+
+- Per-bed pricing is the genre convention for foreign-worker housing
+  in Israel. Construction corporations compare apartments by per-bed
+  cost across very different bed counts (a 6-bed 2-room and a 12-bed
+  4-room aren't comparable on whole-apartment price). Stripping per-bed
+  display would make the marketplace harder to scan, not easier.
+- The booking simplification (whole-apartment only, no worker-count
+  input, binary availability) is the part that mattered for cutting
+  scope — the price-display unit was incidental and got pulled along
+  by accident.
+
+**Status:** ✅ Locked. Supersedes only the pricing-display and column-
+name portions of the earlier 2026-05-13 leasing-model entry; the
+binary-availability and no-worker-count-input portions of that entry
+stand.
+
+---
+
+## 2026-05-13 — Booking form inputs: start_date + duration_months (no end date, no message)
+
+**Context:** Earlier 2026-05-13 entries pinned the booking model
+(full-apartment only, no worker-count input, binary availability) but
+left the form fields as "start date + end date + optional message" by
+inheritance from the legacy shape. Construction corporations think in
+"how many months", not "what's the exit date" — and the optional
+message field generates noise without unblocking anything. Lock the
+final field shape here.
+
+**Decision:** the corporate booking request form asks for **two inputs
+only**:
+
+1. **תאריך התחלה** (`start_date`) — the lease start date.
+2. **משך השכירות (חודשים)** (`duration_months`) — an integer **1–12**.
+   Sub-monthly leases aren't a thing; > 12 months goes through the
+   future renewal flow (post-MVP), not a single mega-booking.
+
+There is no end-date input, and no message / "הודעה לבעל הנכס" input.
+
+**Schema implications:**
+
+- Add `bookings.duration_months smallint NOT NULL CHECK (duration_months BETWEEN 1 AND 12)`.
+- Keep `bookings.end_date date NOT NULL CHECK (end_date > start_date)`.
+  The server computes it from `start_date + (duration_months || ' months')::interval`
+  on booking insert/update so the availability-overlap query
+  (`status IN ('confirmed','paid','accepted') AND start_date < requested_end AND end_date > requested_start`)
+  keeps working without schema gymnastics. Don't make `end_date` a
+  generated column — keep it a regular column populated server-side
+  to avoid PG generated-column edge cases.
+- `bookings.request_message text` column stays in the schema (IRON_RULE
+  3 — no destructive drops on the path to MVP) but is never populated
+  from the UI. Same pattern as `worker_count`, which is stamped from
+  `listings.bed_count` server-side.
+
+**UI / form implications:**
+
+- Two inputs: start date (date input) and duration (integer 1–12 — UX
+  control choice left to design: number stepper, dropdown, or chip
+  group, all acceptable). Drop the end-date input. Drop the message
+  textarea.
+- Submit is disabled until `start_date` is set, `duration_months` is
+  between 1 and 12 inclusive, and the listing is `פנוי` for the
+  derived range.
+- The booking summary breakdown uses `duration_months` directly as
+  the `N` in the months row: "חודשים: N · מחיר למיטה: ₪X × Y מיטות
+  = ₪Z / חודש · שכירות: ₪(Z × N) · עמלת עוז (3%): ₪commission ·
+  סה״כ: ₪total". No change to the per-bed × bed_count derivation.
+- Availability pill on the listing detail page recomputes against the
+  derived `end_date` (`start_date + duration_months`) as soon as both
+  inputs are valid.
+
+**Server-side flow on submit:**
+
+```ts
+const end_date = addMonths(start_date, duration_months); // server util
+const monthly_rent_total = listing.monthly_rent_per_bed * listing.bed_count * duration_months;
+const oz_commission = Math.round(monthly_rent_total * 0.03);
+await supabase.from('bookings').insert({
+  listing_id, corporation_id, owner_id,
+  start_date,
+  duration_months,
+  end_date,
+  worker_count: listing.bed_count, // stamped, unchanged
+  monthly_rent_total,
+  oz_commission,
+  total_amount: monthly_rent_total + oz_commission,
+});
+```
+
+The insert happens in a server action (not a browser-side
+`supabase.from(...).insert()` call) so the corp can't tamper with
+`end_date` or the totals — they're derived from the listing and the
+locked commission rate.
+
+**Marketplace filter implications:**
+
+- The marketplace filter bar can optionally surface a `duration_months`
+  filter (1–12) alongside `start_date` so the availability pill
+  recomputes against the derived range. Optional, not required for
+  MVP.
+
+**HelloSign lease template implications:**
+
+- The template uses `{{start_date}}`, `{{end_date}}`, and now also
+  `{{duration_months}}` if the lease prose wants to read "תקופת
+  שכירות של N חודשים" rather than "מ-X עד Y". Both placeholders
+  populate from the same booking row.
+
+**Rationale:**
+
+- A "how many months" prompt matches how corporations actually plan
+  crew rotations (cycles of 3, 6, 9, 12 months) — they pick a duration
+  off a familiar list, not an arbitrary end date.
+- Forcing duration ∈ [1, 12] keeps each booking a single lease
+  contract under the standardized 12-month HelloSign template. Beyond
+  12 months is a renewal, not a single longer booking.
+- Dropping the message field removes one optional input that
+  generates more support work than business value (corps either send
+  out-of-band emails or fill in basics during HelloSign signing).
+- Server-computed `end_date` keeps the availability query simple and
+  the schema stable.
+
+**Status:** ✅ Locked. Replaces the "start_date + end_date + optional
+message" form shape implied by the earlier 2026-05-13 leasing-model
+entries.
+
+---
+
+## 2026-05-13 — Per-bedroom data model for תקנות עובדים זרים compliance
+
+**Context:** The 4 m² rule (DECISIONS_LOG 2026-05-13
+"תקנות עובדים זרים: 4 m² is per-bed-per-bedroom") requires that **each
+bedroom** provide at least 4 m² per bed it contains. Until now the
+listings schema only carried property-level aggregates: `bed_count`
+(total beds in the apartment) and `bedroom_count` (total bedrooms,
+nullable). Those aggregates can't validate the per-bedroom rule — you
+can have a property with 4 bedrooms, 12 beds, and 60 m² that passes
+"on average" but contains an undersized bedroom that fails compliance.
+
+**Decision:** capture per-bedroom data on listing creation as a new
+child table.
+
+**New schema — `public.listing_bedrooms`:**
+
+```sql
+CREATE TABLE public.listing_bedrooms (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  listing_id    uuid NOT NULL REFERENCES public.listings(id) ON DELETE CASCADE,
+  display_order smallint NOT NULL DEFAULT 0,
+  -- Bedroom area in square metres. numeric(5,2) admits 999.99 m² with two
+  -- decimals so owners can enter e.g. 12.5 m². Whole-number entries are fine.
+  size_sqm      numeric(5,2) NOT NULL CHECK (size_sqm > 0),
+  -- Beds in this specific bedroom. The per-bedroom regulation check is
+  -- `size_sqm >= 4 * bed_count`. CHECK BETWEEN 1 AND 12 because more than
+  -- 12 beds in a single bedroom is implausible and almost certainly a
+  -- data-entry error.
+  bed_count     smallint NOT NULL CHECK (bed_count BETWEEN 1 AND 12),
+  created_at    timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE INDEX listing_bedrooms_listing_idx
+  ON public.listing_bedrooms(listing_id, display_order);
+```
+
+**Property-level aggregates become denormalized:**
+
+- `listings.bedroom_count smallint` (nullable) — superseded as a hand-entered
+  number; now **derived** from `COUNT(listing_bedrooms WHERE listing_id = X)`.
+  Stored on `listings` for cheap reads (marketplace cards, filters).
+- `listings.bed_count smallint` — now **derived** from
+  `SUM(listing_bedrooms.bed_count WHERE listing_id = X)`. Stored on
+  `listings` for cheap reads.
+- Both aggregates are populated by the listing-form server action at
+  save time alongside the `listing_bedrooms` upsert. No DB triggers —
+  the server action is the single writer.
+- The earlier 2026-05-13 entry "Listing fields: bedrooms (not rooms) +
+  four amenities" wrote `bedroom_count` as a direct numeric input on
+  the form. **That portion is superseded** — there's no standalone
+  bedroom-count input; the count comes from the rooms editor.
+
+**Listing form changes:**
+
+- The form loses the standalone `מספר חדרי שינה` numeric input.
+- It gains a **rooms editor** section ("חדרי שינה") with an "הוסף חדר"
+  button. Each row captures `size_sqm` + `bed_count` for one bedroom.
+  At least one row is required to publish.
+- The form computes and displays `סה״כ מיטות: N` and
+  `סה״כ חדרי שינה: M` derived from the rows.
+- Per-row compliance indicator: each row shows a check or warning
+  against the 4 m² rule. Warning copy when failing:
+  *"חדר זה אינו עומד בתקנות עובדים זרים — נדרשים 4 מ״ר לכל מיטה
+  (חדר עם N מיטות חייב להיות לפחות 4N מ״ר)."* Saving as draft is
+  always allowed; publishing a non-compliant listing is allowed too
+  in MVP (we surface the warning to the owner; we don't enforce).
+  Enforcement / a marketplace compliance badge is a future iteration.
+- The bedroom inputs are per-bedroom only — a living room is **not**
+  a bedroom; it stays captured by the separate `has_living_room`
+  boolean amenity per the earlier 2026-05-13 entry.
+
+**Bunk-beds clarification (reaffirmed, not new):**
+
+`listings.has_bunk_beds boolean NOT NULL DEFAULT false` stays a
+**property-level** amenity, alongside `has_kitchen`, `has_living_room`,
+`has_wifi`, `has_parking`, `has_ac`, `has_gas_cooking`. It is not
+captured per-bedroom in MVP — the owner ticks a single property-level
+checkbox indicating whether the unit includes bunk beds anywhere.
+Per-bedroom bunk-bed tracking can join `listing_bedrooms` in a future
+iteration if it turns out to matter; for now property-level is enough.
+This reaffirms the entry locked in
+DECISIONS_LOG 2026-05-13 "Listing fields: bedrooms (not rooms) + four
+amenities".
+
+**Marketplace + downstream implications:**
+
+- The marketplace "מינ׳ מיטות" filter continues to read
+  `listings.bed_count` (the denormalized sum) — no join needed.
+- Listing detail page shows the per-bedroom breakdown table when the
+  buyer expands a "פירוט חדרים" section: each row "חדר N · X מ״ר ·
+  Y מיטות · ✓/⚠ עומד בתקנות".
+- The booking total math (DECISIONS_LOG 2026-05-13 "Leasing-model
+  amendment") still uses `monthly_rent_per_bed × bed_count ×
+  duration_months + 3%`. `bed_count` is now the denormalized sum,
+  so the math is unchanged.
+- When the verification system eventually resumes (deferred per
+  DECISIONS_LOG 2026-05-12), the Level-2 remote attestation flow
+  reviews the `listing_bedrooms` rows specifically to confirm each
+  bedroom's area is what the owner says it is.
+
+**Rationale:**
+
+- The 4 m² rule is the only way construction corporations can ship
+  a compliant lease. The platform should make it trivially obvious
+  to an owner whether their listing will meet the requirement —
+  ideally before they publish.
+- A child table is the right shape: bedrooms vary in size and bed
+  count, and aggregates obscure the per-room failures the regulation
+  actually cares about.
+- Denormalized aggregates on the parent keep the marketplace fast
+  without adding joins; the server action keeps them in sync.
+- Bunk beds stay property-level because the corporation's question
+  is "does this apartment have bunks?" not "which exact bedroom has
+  them?". The latter belongs in photos and the lease attachment.
+
+**Status:** ✅ Locked. Supersedes only the "bedroom_count as direct
+numeric input on the listing form" portion of the earlier 2026-05-13
+"Listing fields" entry; the four amenity additions and the
+bedrooms-vs-rooms terminology lock in that entry stand.
+
+---
+
+## 2026-05-13 — Listing optional facilities: canonical 7-item list
+
+> 🔄 **Amended same-day** — see "Listing optional facilities: expanded to 9 items (adds has_living_room + has_gas_cooking back)" below. The list is now **9 items**, not 7. The structure, defaults, and bunk-beds clarification in this entry stand; only the *count of items* and the "dropped from earlier locks" portion are superseded.
+
+**Context:** Earlier 2026-05-13 entries accumulated an amenity set
+piecemeal — `has_kitchen`, `has_wifi`, `has_parking` from the initial
+schema, then `has_living_room`, `has_bunk_beds`, `has_ac`,
+`has_gas_cooking` from "Listing fields: bedrooms (not rooms) + four
+amenities". On product review the list was wrong in two directions:
+some items don't belong in the canonical "optional facilities" group
+(`has_living_room` is a structural feature, not an amenity;
+`has_gas_cooking` over-specifies the cooking surface), and three items
+were missing (`has_furniture`, `has_terrace_yard`, `has_washing_machine`).
+Lock the canonical list here.
+
+**Decision:** the listing's "optional facilities" group is exactly
+these **seven booleans**, in this order:
+
+| # | Column | Hebrew label | Notes |
+|---|---|---|---|
+| 1 | `has_ac` | מזגן | |
+| 2 | `has_wifi` | אינטרנט | |
+| 3 | `has_furniture` | ריהוט | New — apartment is furnished or not. |
+| 4 | `has_parking` | חניה | |
+| 5 | `has_kitchen` | מטבח | Default flipped to `false` (opt-in like the others). |
+| 6 | `has_terrace_yard` | מרפסת / חצר | New — single boolean covering either a terrace or a yard. Splitting into two columns is out of scope; if the distinction matters later, refine via a Dream. |
+| 7 | `has_washing_machine` | מכונת כביסה | New. |
+
+**Dropped from earlier locks (do not add back without a new entry):**
+
+- `has_living_room` — superseded. A living room is a structural
+  property of the apartment, not an optional facility. The bedrooms-
+  vs-rooms semantic lock (DECISIONS_LOG 2026-05-13 "Listing fields")
+  stands — the form counts bedrooms, not rooms — but no boolean
+  tracks whether a living room exists. If an owner wants to advertise
+  "no living room / studio layout", they use the description field.
+- `has_gas_cooking` — superseded. Cooking-surface type isn't worth a
+  structured field; `has_kitchen` covers the kitchen existence
+  question and any gas-vs-electric nuance lives in the description
+  field.
+
+**Bunk-beds clarification — outside the facilities group:**
+
+`has_bunk_beds` (`מיטות קומותיים`) **stays** as a property-level
+boolean on `listings` (reaffirming the lock in DECISIONS_LOG
+2026-05-13 "Listing fields"). It is **not** part of the "optional
+facilities" group — bunk beds describe bed configuration, not a
+facility/service. The schema places it alongside `has_*` columns as
+a convenience, but UI treatments should group it with bed-related
+questions, not in the facilities checklist.
+
+**Schema implications:**
+
+- `listings` keeps: `has_ac`, `has_wifi`, `has_furniture`,
+  `has_parking`, `has_kitchen`, `has_terrace_yard`,
+  `has_washing_machine`, `has_bunk_beds`.
+- `listings` drops (from earlier-locked-but-now-superseded): `has_living_room`,
+  `has_gas_cooking`. These columns may already exist in a local
+  Supabase from the earlier locks but were never deployed to a real
+  Supabase (the migration was authored but the project is pre-launch).
+  When the canonical-facilities migration ships, it adds the three
+  new columns and drops the two superseded columns in the same
+  migration — destructive drops are permitted here because no
+  production data exists yet (IRON_RULE 3 still applies for the
+  approval workflow, but the data-loss concern doesn't).
+- The `has_kitchen` default flips from `true` to `false` to match
+  the other facilities — owners explicitly tick what their apartment
+  offers.
+
+**Rationale:**
+
+- A flat 7-item facility list is the right shape for the listing
+  form: short enough to render as a single group, structured enough
+  to drive marketplace filters per facility once those are
+  introduced (out of MVP).
+- Slashing `has_living_room` and `has_gas_cooking` cuts noise without
+  losing real signal — both can be inferred from the description or
+  the photos.
+- Adding furniture, terrace/yard, and washing machine fills gaps
+  that crews ask about during property visits.
+- Bunk beds stays property-level (per the previous "no per-bedroom
+  bunk tracking" decision) but lives outside the facilities group
+  because it answers a different question ("what's the bed
+  configuration?" not "what does the apartment provide?").
+
+**Status:** ✅ Locked. Supersedes the amenity-list portion of the
+earlier 2026-05-13 "Listing fields: bedrooms (not rooms) + four
+amenities" entry — specifically the four new booleans named there
+(`has_living_room`, `has_bunk_beds`, `has_ac`, `has_gas_cooking`)
+are no longer the canonical set. `has_bunk_beds` survives as a
+separate (non-facilities) property-level boolean; `has_ac` survives
+in the new facilities list; `has_living_room` and `has_gas_cooking`
+are removed.
+
+---
+
+## 2026-05-13 — Listing optional facilities: expanded to 9 items (adds has_living_room + has_gas_cooking back)
+
+> 🔄 **Amended same-day** — see "Facilities list amendment: bunk beds joins the list (10 items); answer required, not optional" below. The list now has 10 items (bunk beds moves into the facilities group), and the "optional" framing is dropped from the group name because bunk beds requires an explicit yes/no answer. The 9 items locked in this entry are unchanged in name and default; only the count and the bunk-beds placement are superseded.
+
+
+**Context:** Same-day review of the "canonical 7-item list" entry above
+flagged that `has_living_room` and `has_gas_cooking` shouldn't have
+been dropped — both carry real signal for the buyer and have a
+reasonable yes/no answer per property. Re-add them.
+
+**Decision:** the canonical optional-facilities list is **9 items**:
+
+| # | Column | Hebrew label |
+|---|---|---|
+| 1 | `has_ac` | מזגן |
+| 2 | `has_wifi` | אינטרנט |
+| 3 | `has_furniture` | ריהוט |
+| 4 | `has_parking` | חניה |
+| 5 | `has_kitchen` | מטבח |
+| 6 | `has_gas_cooking` | כיריים גז |
+| 7 | `has_living_room` | סלון |
+| 8 | `has_terrace_yard` | מרפסת / חצר |
+| 9 | `has_washing_machine` | מכונת כביסה |
+
+Ordering groups kitchen + kitchen-related (gas) and places living
+spaces (kitchen, gas, living_room, terrace/yard) together; the
+ordering above is a suggested grouping, not a hard ordering contract.
+
+**Defaults:** all nine are `boolean NOT NULL DEFAULT false`. Owners
+explicitly tick what their apartment offers. The earlier "kitchen
+default = true" pre-tick is dropped — opt-in everywhere.
+
+**Standing rules from the prior entry (unchanged):**
+
+- `has_bunk_beds` (`מיטות קומותיים`) remains a property-level boolean
+  but **outside** the facilities group — it's a bed-configuration
+  question, not a facility/services one.
+- Per-bedroom variants of any facility (e.g., AC per bedroom) are
+  not in MVP; everything is property-level.
+- The facilities set is extensible — additions go through a new
+  DECISIONS_LOG entry, not silent column additions.
+
+**Schema implications:**
+
+- `listings` keeps **all nine** facility columns + `has_bunk_beds`.
+  Specifically: `has_ac`, `has_wifi`, `has_furniture`, `has_parking`,
+  `has_kitchen`, `has_gas_cooking`, `has_living_room`,
+  `has_terrace_yard`, `has_washing_machine`, plus `has_bunk_beds`.
+- No columns get dropped from prior locked schemas.
+- The "drop has_living_room / drop has_gas_cooking" instructions in
+  the previous "canonical 7-item" entry are withdrawn.
+
+**Rationale:**
+
+- A living room is a meaningful distinction for crew housing — some
+  apartments are bedroom-only / studio-style and the corp wants to
+  know upfront.
+- Gas cooking is a regulatory + safety concern for some buyers; a
+  yes/no boolean is cheaper to capture than burying it in the
+  description. (Some apartments are induction-only; this lets the
+  owner clarify.)
+- The earlier "they live in the description field" rationale
+  underweighted how structured filters help corporations scan the
+  marketplace.
+
+**Status:** ✅ Locked. Supersedes only the "list is 7 items" and
+"has_living_room / has_gas_cooking dropped" portions of the
+preceding "Listing optional facilities: canonical 7-item list"
+entry; the bunk-beds clarification, the "all opt-in / default false"
+default policy, and the bedrooms-vs-rooms separation in that entry
+stand.
+
+---
+
+## 2026-05-13 — Facilities list amendment: bunk beds joins the list (10 items); answer required, not optional
+
+**Context:** The prior "Listing optional facilities" entries placed
+`has_bunk_beds` outside the facilities group on the rationale that
+bunk beds describe bed *configuration* rather than a facility/service.
+On product review that distinction reads as overengineering — buyers
+asking "what's in this apartment?" naturally expect bunk-bed info
+alongside the kitchen / AC / wifi list, and grouping them together
+is simpler for both the form and the listing-detail page.
+
+Separately, **the answer to "are there bunk beds?" is required** —
+unlike the other facilities (where leaving a checkbox unticked
+implicitly means "no"), bunk beds needs an explicit owner answer:
+yes or no, no implicit default.
+
+**Decision:**
+
+- `has_bunk_beds` is **part of the facilities list**. The list is now
+  **10 items**.
+- The list is no longer called "**optional** facilities" — drop the
+  "optional" prefix. Canonical name: **"facilities" / "מתקנים"**.
+  Most items in the list are still opt-in (the owner ticks if it
+  applies), but bunk beds requires an explicit answer, so the
+  group-level "optional" label is wrong.
+- All other items keep their `boolean NOT NULL DEFAULT false` schema
+  shape — schema-level defaults stay false for cheap inserts and to
+  preserve the "untouched = false" semantic for the 9 ticky items.
+- `has_bunk_beds` keeps its `boolean NOT NULL DEFAULT false` schema
+  shape too (the column always has a value at the DB level). The
+  "required answer" rule is enforced **at the form / server-action
+  layer** — the listing-form server action rejects inserts/updates
+  where the owner didn't explicitly select yes or no. The form UX
+  (radio group, segmented control, required toggle — design's
+  choice) makes the "you must answer" semantic clear; the submit
+  button stays disabled until the owner has made a choice.
+
+**The canonical 10-item facilities list (final, locked):**
+
+| # | Column | Hebrew label | Answer mode |
+|---|---|---|---|
+| 1 | `has_ac` | מזגן | opt-in (default false) |
+| 2 | `has_wifi` | אינטרנט | opt-in (default false) |
+| 3 | `has_furniture` | ריהוט | opt-in (default false) |
+| 4 | `has_parking` | חניה | opt-in (default false) |
+| 5 | `has_kitchen` | מטבח | opt-in (default false) |
+| 6 | `has_gas_cooking` | כיריים גז | opt-in (default false) |
+| 7 | `has_living_room` | סלון | opt-in (default false) |
+| 8 | `has_terrace_yard` | מרפסת / חצר | opt-in (default false) |
+| 9 | `has_washing_machine` | מכונת כביסה | opt-in (default false) |
+| 10 | `has_bunk_beds` | מיטות קומותיים | **required answer (yes/no)** |
+
+**Implications:**
+
+- No schema column changes vs the prior 9-item lock — `has_bunk_beds`
+  was already a column on `listings`. Only its grouping changes.
+- Glossary entry renamed: "Optional facilities (listing amenity list)"
+  → "Facilities (listing amenity list)".
+- Listing form / detail / marketplace surfaces present a single
+  "מתקנים" section containing all 10 items.
+- The listing-form server action validates that `has_bunk_beds` was
+  set deliberately. Implementation tip: pass `has_bunk_beds` from
+  the form as `boolean | null` (null = not yet answered) and reject
+  null at the action boundary; the DB column stays NOT NULL because
+  the action only inserts after validation.
+
+**Rationale:**
+
+- Grouping all 10 booleans together is simpler for the form, the
+  listing-detail UI, and the marketplace filters (when those
+  arrive). The bed-configuration-vs-facility distinction was real
+  but not load-bearing.
+- Requiring an explicit bunk-beds answer matters because the
+  default-false answer is materially wrong for the buyer when the
+  owner forgets to think about it — a corp expecting standard beds
+  in a 6-bed unit will misallocate space if the unit is actually
+  2× bunk-bed configurations sleeping 6. The form should force
+  the choice.
+
+**Status:** ✅ Locked. Supersedes only the "list is 9 items" and
+"bunk beds outside the facilities group" portions of the preceding
+"expanded to 9 items" entry; the 9 individual items' names and
+defaults stand, and the bedrooms-vs-rooms separation stands.
+
+---
+
+## 2026-05-13 — `owner_company` user role: canonical Hebrew label is "מנהל נכס"
+
+**Context:** The supply-side user role is the `user_role` enum value
+`owner_company` (locked 2026-05-05, expanded 2026-05-06 to add
+`construction_corporation` alongside). Earlier prompts used Hebrew
+labels like "חברה לניהול נכסים" (property-management company) and
+"אני חברת ניהול" (I am a management company) — these described the
+*company* rather than the *user*, and they read awkwardly in a
+form-field context. Lock the canonical Hebrew label here.
+
+**Decision:** the canonical Hebrew display name for the `owner_company`
+user role is **"מנהל נכס"** (literally "property manager"). Use this
+string verbatim:
+
+- Sign-up persona picker label
+- Profile page role display
+- Email salutations / addressee role
+- Any UI element that names the role to the user
+- Admin Studio role-picker labels (for consistency)
+
+Don't introduce alternatives ("בעל נכס", "חברת ניהול", "מנהל נכסים"
+plural, etc.) — they fragment the vocabulary. If the team wants to
+shorten or pluralize for a specific surface, propose it in a new
+DECISIONS_LOG entry first.
+
+**Companies, not users, own properties — clarification:**
+
+- The `companies` table represents a property-owning **company**
+  (legal entity with ח.פ. or ע.מ., banking info, etc.).
+- The `owner_company` **user_role** represents a **person who works
+  for** that company and acts on its behalf in the marketplace —
+  posting listings, accepting bookings, signing leases. The role
+  name in Hebrew is "מנהל נכס".
+- MVP locks **single user per company** (DECISIONS_LOG 2026-04-30
+  "B2B MVP: single user per company"). One `companies` row maps to
+  one `profiles` row with `role = 'owner_company'`. Multi-user team
+  accounts within a single company are a Dream — when they ship,
+  every user from a property-owning company still has the same
+  `owner_company` role (Hebrew label "מנהל נכס"); sub-roles within
+  a company (admin / employee / viewer) are not in the schema and
+  not planned for the first multi-user iteration either. There is
+  **one type of role for a user from a property-owning company.**
+
+**Implications:**
+
+- `PROMPT_LIBRARY` sign-up persona picker text "חברה לניהול נכסים"
+  is updated to **"מנהל נכס"**. Other sign-up persona labels
+  ("תאגיד בנייה" for `construction_corporation`, "פרטיים" for the
+  coming-soon `owner_individual`) are unchanged.
+- `GLOSSARY` gets a new "owner_company / מנהל נכס" entry; stale
+  legacy entries (`b2b_owner`, `b2c_owner`, `corporate_member`) are
+  marked superseded.
+- `BUILD_PLAN` §3.B picker description updated.
+- No schema change. The English enum value `owner_company` stays
+  (renaming would be a destructive migration with no payoff;
+  English-side stability matters for code/types/RLS policies).
+- No additional sub-roles within `owner_company` in MVP. Avoid
+  inventing UI affordances that imply multi-role/multi-user company
+  accounts.
+
+**Rationale:**
+
+- "מנהל נכס" describes a person, which matches what a `user_role`
+  represents. "חברה לניהול נכסים" was describing the company itself
+  and reading it back in the persona picker created cognitive
+  friction ("am I picking a *company* or am I picking *me*?").
+- Locking one canonical translation prevents the kind of vocabulary
+  fragmentation that hit "Audit Pack" / "תיק נכס" before we locked
+  that one.
+
+**Status:** ✅ Locked.
 
 ---
 

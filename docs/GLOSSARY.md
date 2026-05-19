@@ -12,24 +12,33 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 ### admin
 **Definition:** Internal operations / engineering. Highest access. One of the `user_role` enum values (BUILD_PLAN §3.B / OQ-3 + OQ-4).
 
-### B2B
-**Definition:** Business-to-business path. The user is a real estate management company that handles multiple properties professionally.
-**See:** `specs/B2B_MVP.md`, `specs/dreams/B2B_DREAMS.md`
-**Note:** B2B and B2C are **separate products** with separate dashboards, not progressive tiers.
-
 ### b2b_owner
-**Definition:** Manager-class supplier — a real estate management company. One of the `user_role` enum values.
-
-### B2C
-**Definition:** Business-to-consumer path. The user is a private property owner managing 1–5 properties on their own.
-**Persona name:** Solo Operator (or just "Solo")
-**See:** `specs/B2C_MVP.md`, `specs/dreams/B2C_DREAMS.md`
+**Status:** 🔄 Superseded (2026-05-05). Renamed to `owner_company` (see entry below); the canonical Hebrew display label for that role is **"מנהל נכס"** per DECISIONS_LOG 2026-05-13.
 
 ### b2c_owner
-**Definition:** Solo Operator — private property owner. The default role assigned to new signups by the persona-aware `handle_new_user()` trigger. One of the `user_role` enum values.
+**Status:** 🔄 Superseded (2026-05-05). Renamed to `owner_individual`. Reserved enum value, not signupable in MVP per BUILD_PLAN §3.B.
 
 ### corporate_member
-**Definition:** Construction-corporation buyer (demand side). One of the `user_role` enum values.
+**Status:** 🔄 Superseded (2026-05-05). Renamed to `construction_corporation`.
+
+### B2B
+**Definition:** Business-to-business path. The user is a property-owning company. In oz-marketplace this is a single `user_role` value — `owner_company`, Hebrew label "מנהל נכס".
+**Note:** the legacy "B2B vs B2C" framing referred to two separate products with separate dashboards. The MVP scope re-lock (DECISIONS_LOG 2026-05-06) collapsed that — there is only one marketplace product, with `owner_company` and `construction_corporation` as the two sign-upable user roles. The "B2B" terminology survives in casual prose and in the dreams spec (`specs/dreams/B2B_DREAMS.md`) but isn't a product-level distinction.
+
+### B2C
+**Definition:** Business-to-consumer path — the private-individual property-owner persona. **Out of MVP**: the `owner_individual` enum value exists but no signup flow leads to it. See `specs/B2C_MVP.md`, `specs/dreams/B2C_DREAMS.md`.
+
+### construction_corporation
+**Definition:** Demand-side user role — a person acting on behalf of a construction corporation buying housing capacity for foreign workers. Signupable in MVP via the "תאגיד בנייה" persona picker (DECISIONS_LOG 2026-05-06).
+
+### owner_company / מנהל נכס
+**Definition:** Supply-side user role — a person acting on behalf of a property-owning company. The `user_role` enum value is `owner_company`; the canonical Hebrew display label is **"מנהל נכס"** (DECISIONS_LOG 2026-05-13).
+**Single-role-per-company:** MVP has one and only one type of role for a user from a property-owning company — there are no sub-roles (admin / employee / viewer) inside a company. Multi-user team accounts are a Dream; even when they ship, every user from a property-owning company carries the same `owner_company` role.
+**Hebrew vocabulary lock:** the label "מנהל נכס" is canonical for all UI surfaces — sign-up persona picker, profile-page role display, email salutations, admin Studio. Do not use alternatives ("בעל נכס", "חברת ניהול", "מנהל נכסים" plural, "חברה לניהול נכסים").
+**See:** DECISIONS_LOG 2026-05-13 "`owner_company` user role: canonical Hebrew label is 'מנהל נכס'"; BUILD_PLAN §3.B.
+
+### owner_individual
+**Definition:** Reserved `user_role` enum value for the private-individual property-owner persona. **Not signupable in MVP**: the persona picker shows a "coming soon" message instead of creating an account.
 
 ### Demand side
 **Definition:** Construction corporations who need housing for their foreign workers. They are the "buyers" on the platform — corporate users with KYC-verified company accounts.
@@ -45,8 +54,7 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **See:** `specs/dreams/B2B_DREAMS.md`
 
 ### Manager
-**Definition:** Real estate management company. The B2B MVP persona. Manages 5+ properties professionally for corporate clients.
-**See:** `specs/B2B_MVP.md`
+**Status:** 🔄 Legacy persona name. In oz-marketplace this concept maps directly to the `owner_company` user role — Hebrew label **"מנהל נכס"** — per DECISIONS_LOG 2026-05-13. Use the canonical labels in any new UI / spec text; the "Manager" persona name survives only in legacy prose and the dreams spec.
 
 ### Solo Operator (Solo)
 **Definition:** Private property owner. The B2C MVP persona. Owns 1–5 properties, manages alone.
@@ -58,6 +66,24 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 ---
 
 ## Product concepts
+
+### Full-property lease (MVP leasing model)
+**Definition:** In MVP, a booking covers the **entire apartment** for a contiguous date range. A construction corporation pays for the whole listing or nothing — there is no partial-apartment booking, no two-corp coexistence in one unit, no worker-count input on the booking form.
+**Booking form inputs (two only):** **start date** (`start_date`) and **duration in months** (`duration_months`, smallint, 1–12 inclusive). No end-date input — `end_date` is server-derived from `start_date + duration_months`. No message / "הודעה לבעל הנכס" input. See DECISIONS_LOG 2026-05-13 "Booking form inputs".
+**Price display — per bed.** The marketplace and listing detail surface the **per-bed monthly price** (`listings.monthly_rent_per_bed`), shown as "₪X / מיטה" on cards and "₪X / מיטה / חודש" on the detail page. The corporate booking form derives the whole-apartment total from `monthly_rent_per_bed × bed_count × duration_months`. Per-bed is the unit corporations use to compare apartments with different bed counts; the total they pay is for the whole apartment.
+**Availability — binary.** A listing is either **available** (`פנוי`) or **leased** (`מושכר`) for the requested date range. Computed by checking whether any `bookings` row with `status IN ('confirmed', 'paid', 'accepted')` overlaps the range. No fractional `available_beds`, no "3 of 8 beds taken" display. When the corp has entered a `start_date` + `duration_months`, the pill recomputes against the derived range.
+**`bed_count` is informational AND load-bearing:** the listing form asks how many beds the apartment has; the marketplace filter "מינ׳ מיטות" filters on it; the booking total math multiplies by it. It does not drive partial bookings — the booking still covers the whole apartment.
+**Booking math:** `Total = (monthly_rent_per_bed × bed_count × duration_months) + 3% commission` (commission per DECISIONS_LOG 2026-05-12).
+**Booking summary UI breakdown:** "חודשים: N · מחיר למיטה: ₪X × Y מיטות = ₪Z / חודש · שכירות: ₪(Z × N) · עמלת עוז (3%): ₪commission · סה״כ: ₪total".
+**Future (Dreams):** partial / per-bed / per-worker leasing — including multi-corp coexistence (one apartment, two corps) — and durations beyond 12 months (handled via renewal flow, not a single longer booking) move to `docs/specs/dreams/B2B_DREAMS.md`.
+**See:** DECISIONS_LOG 2026-05-13 "MVP leasing model: full property only, binary availability" (original entry), "Leasing-model amendment: per-bed price display, full-property booking" (same-day pricing amendment), and "Booking form inputs: start_date + duration_months (no end date, no message)" (same-day form-shape lock).
+
+### Audit Pack (`תיק נכס`)
+**Status:** ⏸ **Deferred — not in MVP.** Lives on the corporate dashboard, which is itself post-MVP per BUILD_PLAN §3.F. Vocabulary and access rule are locked here so they don't drift when the feature ships.
+**Definition:** Downloadable archive of the compliance documents associated with a single property (lease, ownership proof, regulatory attestations, photos, etc.) — assembled for a construction corporation that has booked the property and needs the paperwork for its own regulator and audit purposes.
+**Canonical Hebrew translation:** **`תיק נכס`**. Use this string verbatim everywhere — UI labels, button copy, file names, email subject lines, FAQ answers. Never "חבילת ביקורת", "מסמכי נכס", "ארכיון נכס", or any other alternative.
+**Access rule:** downloadable **only** by users with role `construction_corporation`, and **only after** the requesting corporation has a `confirmed` booking on the property in question. Concretely: corporate user X can download the `תיק נכס` for listing Y iff there exists a `bookings` row where `corporation_id = X.id AND listing_id = Y AND status = 'confirmed'`. Owner-companies don't download a `תיק נכס` (they have direct access to their own property's documents). Admins can download any audit pack. Anonymous users cannot download under any circumstances.
+**See:** DECISIONS_LOG 2026-05-13 "Audit Pack: Hebrew translation + access rule locked"
 
 ### Booking System
 **Definition:** Daily hostel booking engine for the 4 AM HOSTELS properties.
@@ -73,14 +99,57 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **Definition:** Sister project (`pakalnofesh.co.il`) — a marketplace for Israeli vacation experiences for IDF reservists. Built by Alon using the same stack (Next.js + Supabase + Vercel) and Pelecard payment integration. The implementation pattern that the oz-marketplace payment integration mirrors.
 **See:** `IRON_RULES.md` Rule 2
 
+### Bedrooms vs rooms (`חדרי שינה` vs `חדרים`)
+**Definition:** In oz-marketplace, the listing form asks the owner about **bedrooms** (`חדרי שינה`) — **not** **rooms** (`חדרים`).
+**Why this matters:** In Israeli real-estate vocabulary, a "4-room apartment" (`דירת 4 חדרים`) conventionally means 3 bedrooms + 1 living room. Counting "rooms" inflates the number and is ambiguous; counting "bedrooms" is unambiguous and matches the buyer's actual question (how many sleeping spaces can be configured?).
+**Schema:** the listing form captures per-bedroom data via `public.listing_bedrooms` rows (one row per bedroom — `size_sqm` + `bed_count`). `listings.bedroom_count smallint` and `listings.bed_count smallint` on the parent are denormalized aggregates derived from the child rows at save time. Never `room_count` / `rooms` / `room_amount`.
+**Related:** A living room is **not** a bedroom and is not counted as one — the apartment may have a living room but it doesn't go into `listing_bedrooms`. Whether the apartment has a living room is tracked separately as a boolean amenity (`listings.has_living_room` — Hebrew label `סלון`), part of the canonical optional-facilities list (see entry below).
+**See:** DECISIONS_LOG 2026-05-13 "Listing fields: bedrooms (not rooms) + four amenities", "Per-bedroom data model for תקנות עובדים זרים compliance" (same-day refinement), and "Listing optional facilities: expanded to 9 items" (same-day amenity-list amendment).
+
+### Listing bedrooms (`listing_bedrooms` table)
+**Definition:** Child table of `listings` capturing per-bedroom data — one row per bedroom — so the 4 m² regulation can be validated per individual bedroom rather than against a property aggregate. Each row: `size_sqm` (numeric(5,2), > 0) + `bed_count` (smallint, 1–12) + `display_order` for stable ordering.
+**Why a child table:** the 4 m² rule is per-bedroom, never averaged. A property-level aggregate hides the failure — a 4-bedroom 60 m² apartment with one 8 m² bedroom containing 3 beds fails compliance even though it "averages" well.
+**Aggregates on the parent:** `listings.bed_count = SUM(listing_bedrooms.bed_count)` and `listings.bedroom_count = COUNT(listing_bedrooms)`. Both denormalized at save time by the listing-form server action — there are no DB triggers; the server action is the single writer. The marketplace "מינ׳ מיטות" filter reads the parent aggregate without a join.
+**Per-bedroom compliance check:** `size_sqm >= 4 × bed_count`. Surfaced on the listing form as a per-row indicator (✓ / ⚠) so the owner sees compliance per individual bedroom. Saving as draft is always allowed; publishing a non-compliant listing is allowed in MVP (we display the warning; we don't enforce). Enforcement is a future iteration tied to the verification system.
+**See:** DECISIONS_LOG 2026-05-13 "Per-bedroom data model for תקנות עובדים זרים compliance"; `תקנות עובדים זרים` entry below for the rule itself.
+
+### Facilities (listing amenity list)
+**Definition:** The canonical **10-item** list of facility booleans on `listings`. The owner ticks whichever apply when creating a listing — except for **bunk beds**, which requires an explicit yes/no answer.
+**The 10:**
+- `has_ac` — מזגן · opt-in (default false)
+- `has_wifi` — אינטרנט · opt-in (default false)
+- `has_furniture` — ריהוט · opt-in (default false)
+- `has_parking` — חניה · opt-in (default false)
+- `has_kitchen` — מטבח · opt-in (default false)
+- `has_gas_cooking` — כיריים גז · opt-in (default false)
+- `has_living_room` — סלון · opt-in (default false)
+- `has_terrace_yard` — מרפסת / חצר · opt-in (default false; single boolean covering either)
+- `has_washing_machine` — מכונת כביסה · opt-in (default false)
+- `has_bunk_beds` — מיטות קומותיים · **required answer** (the form must collect an explicit yes or no; not pre-filled)
+**Schema vs form semantics:** every column is `boolean NOT NULL DEFAULT false` at the DB level so inserts always have a value. The 9 opt-in items use that default cleanly (unticked = false). For `has_bunk_beds`, the form layer enforces explicit selection — the server action rejects inserts/updates that didn't ask the owner. Implementation tip: pass `has_bunk_beds` through the form action as `boolean | null` (null = not yet answered) and validate non-null at the action boundary.
+**Naming:** the "optional" prefix is dropped from the group name now that bunk beds is required-answer; the canonical group name in UI copy is just **"מתקנים"** / "Facilities".
+**Fire-safe** is its own deferred amenity, separate from this list (see entry below).
+**Future:** the list is extensible — additions go through DECISIONS_LOG as a new entry, not silent column additions.
+**See:** DECISIONS_LOG 2026-05-13 "Listing optional facilities: canonical 7-item list" (initial lock), "expanded to 9 items (adds has_living_room + has_gas_cooking back)" (same-day amendment), and "Facilities list amendment: bunk beds joins the list (10 items); answer required, not optional" (same-day final amendment).
+
+### Fire-safe (property amenity)
+**Status:** ⏸ **Deferred — not in MVP** (DECISIONS_LOG 2026-05-12). The amenity is defined here so the meaning is locked when it's introduced in a later iteration.
+**Definition:** A property is "fire-safe" iff it has **both** a smoke/heat detector **and** a fire extinguisher. Both are required; neither alone qualifies.
+**Future schema:** boolean column `has_fire_safety` on `listings`, default `false`, sitting alongside the existing extensible amenities (`has_kitchen`, `has_wifi`, `has_parking`).
+**Hebrew label (future UI):** "בטיחות אש (גלאי עשן + מטף)".
+**Why deferred:** fire-safety is a meaningful trust signal for foreign-worker housing (per `תקנות עובדים זרים`), but a self-reported boolean has limited value without a verification path — and verification is also deferred (DECISIONS_LOG 2026-05-12). Shipping together once both land.
+**See:** DECISIONS_LOG 2026-05-12 "Fire-safety amenity: deferred, definition locked"
+
 ### Verification level (1 / 2 / 3)
-**Definition:** A verification level is the trust grade of a property listing. Higher level = more verification = better marketplace placement and stronger trust signals to buyers. Stored as `listings.verification_level smallint` (1, 2, or 3).
+**Status:** ⏸ **Deferred — not in MVP** (DECISIONS_LOG 2026-05-12). The full verification system, including all three levels, is post-MVP. The schema column and primitive remain in the codebase but no UI surfaces verification in the first launch.
+**Definition (target design, for when verification work resumes):** A verification level is the trust grade of a property listing. Higher level = more verification = better marketplace placement and stronger trust signals to buyers. Stored as `listings.verification_level smallint` (1, 2, or 3).
 **Levels:**
 - **1** — Owner identity (ID document + selfie). Default. Hebrew badge: "פרטים מהבעלים".
 - **2** — Level 1 + property documents (deed/lease) + photos verified by ops. Hebrew badge: "✓ מאומת מרחוק".
-- **3** — Level 2 + physical inspection by field staff + full compliance check. Future per `DECISIONS_LOG.md` (Tier 3 deferred).
+- **3** — Level 2 + physical inspection by field staff + full compliance check.
+**MVP trust signals (replacing verification):** KYC on owner-company sign-up, HelloSign-signed lease contract, Pelecard-regulated payment rail.
 **Naming alignment:** DB column `verification_level`; TS type `VerificationLevel`; component `<VerificationLevelBadge>`; SCSS module `VerificationLevelBadge.module.scss`. Replaces the legacy A/B/C "verification_tier" terminology.
-**See:** BUILD_PLAN §3.D, §3.B (OQ-6)
+**See:** BUILD_PLAN §3.D, §3.B (OQ-6); DECISIONS_LOG 2026-05-12
 
 ---
 
@@ -120,8 +189,9 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **See:** `ROLES_AND_RLS.md` (filled in Phase 3)
 
 ### user_role enum
-**Definition:** PostgreSQL enum type defining the four user roles in oz-marketplace: `b2c_owner`, `corporate_member`, `b2b_owner`, `admin`. Replaces the legacy 7-value `profiles.role` text column.
-**See:** BUILD_PLAN §3.B (OQ-3 + OQ-4)
+**Definition:** PostgreSQL enum type defining the four user roles in oz-marketplace: `owner_individual`, `owner_company` (Hebrew label "מנהל נכס"), `construction_corporation`, `admin`. The pre-2026-05-05 values (`b2c_owner`, `corporate_member`, `b2b_owner`) are superseded — see those entries.
+**Signupable in MVP:** `owner_company` and `construction_corporation` only. `owner_individual` is reserved but unreachable in MVP signup. `admin` is Studio-invited.
+**See:** BUILD_PLAN §3.B (OQ-3 + OQ-4); DECISIONS_LOG 2026-05-05 (enum-rename); DECISIONS_LOG 2026-05-06 (`construction_corporation` made signupable); DECISIONS_LOG 2026-05-13 (canonical Hebrew label for `owner_company`).
 
 ---
 
@@ -137,7 +207,14 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 **Definition:** Israeli municipal property tax. Tracked as a property cost component for Yield Calculator and reports.
 
 ### תקנות עובדים זרים (Foreign Workers Regulations)
-**Definition:** Israeli regulation governing housing standards for foreign workers. Key requirements: minimum 4m² per worker, ventilation, sanitary facilities (1:6 ratio), fire safety. Compliance is a core platform feature.
+**Definition:** Israeli regulation governing housing standards for foreign workers. Compliance is a core platform feature.
+**Key area requirement — per-bedroom, never aggregate (locked 2026-05-13):** the regulation requires **a minimum of 4 m² per bed within each bedroom**. A bedroom with N beds must be at least (4 × N) m² — for example, 3 beds → ≥ 12 m², 5 beds → ≥ 20 m². The minimum is calculated per individual bedroom, never averaged across the property; a property with one undersized bedroom fails compliance even if its total area exceeds the aggregate threshold.
+**Validation data:** captured per-bedroom in `listing_bedrooms` (`size_sqm` + `bed_count` per row). The listing form surfaces a per-row compliance indicator (`size_sqm >= 4 × bed_count`) and an aggregate signal across all bedrooms; the owner sees the warning but is not blocked from publishing in MVP. See `Listing bedrooms (listing_bedrooms table)` entry above.
+**Other key requirements:** ventilation, sanitary facilities (1:6 ratio), fire safety (see `Fire-safe (property amenity)` — deferred from MVP).
+**Canonical Hebrew phrasings:**
+- Long form (legal callout): *"תקנות עובדים זרים מחייבות מינימום 4 מ״ר לכל מיטה בכל חדר שינה. חדר שינה עם N מיטות חייב להיות לפחות (4 × N) מ״ר — לדוגמה: 3 מיטות → לפחות 12 מ״ר. חישוב לפי חדר, לא לפי ממוצע בנכס."*
+- Short form (stat tile / chip): *"4 מ״ר / למיטה (לפי חדר שינה)"*. Drop the legacy "4 מ״ר / לעובד" — it invites the wrong mental model.
+**See:** DECISIONS_LOG 2026-05-13 "תקנות עובדים זרים: 4 m² is per-bed-per-bedroom, never aggregate"
 
 ---
 
@@ -179,3 +256,16 @@ Terms used across oz-marketplace, in alphabetical order. When introducing a new 
 |---|---|---|
 | 2026-04-30 | Initial glossary (in legacy repo) | Adir |
 | 2026-05-02 | Ported to oz-marketplace; verification_tier A/B/C → verification_level 1/2/3; property_owners → owners; user_role enum entry added; CP-N and OQ-N entries added | Phase 0 |
+| 2026-05-12 | Verification level entry marked deferred — verification system (all levels) out of MVP per DECISIONS_LOG 2026-05-12 | — |
+| 2026-05-12 | Added "Fire-safe (property amenity)" entry — deferred from MVP, definition locked per DECISIONS_LOG 2026-05-12 | — |
+| 2026-05-13 | Added "Bedrooms vs rooms" entry — locks `bedroom_count` (not `room_count`) and the Hebrew bedrooms/rooms distinction per DECISIONS_LOG 2026-05-13 | — |
+| 2026-05-13 | Added "Audit Pack (`תיק נכס`)" entry — locks canonical Hebrew translation and corporate-after-confirmed-booking access rule per DECISIONS_LOG 2026-05-13 | — |
+| 2026-05-13 | Clarified `תקנות עובדים זרים` 4 m² rule as per-bed-per-bedroom (never aggregate); locked canonical Hebrew long/short forms per DECISIONS_LOG 2026-05-13 | — |
+| 2026-05-13 | Added "Full-property lease (MVP leasing model)" entry — locks full-apartment-only leasing + binary availability per DECISIONS_LOG 2026-05-13 | — |
+| 2026-05-13 | Amended "Full-property lease" entry — price display stays per-bed; booking total derived as `monthly_rent_per_bed × bed_count × months` (same-day correction per DECISIONS_LOG 2026-05-13 amendment) | — |
+| 2026-05-13 | Amended "Full-property lease" entry — booking form takes start_date + duration_months (1–12) only; no end-date input, no message input; `end_date` server-derived (per DECISIONS_LOG 2026-05-13 booking-form lock) | — |
+| 2026-05-13 | Amended "Bedrooms vs rooms" entry + added new "Listing bedrooms (listing_bedrooms table)" entry — per-bedroom data captured in a child table for regulation validation; `listings.bedroom_count` + `bed_count` become denormalized aggregates (per DECISIONS_LOG 2026-05-13 per-bedroom-data lock); also augmented `תקנות עובדים זרים` entry with the validation flow | — |
+| 2026-05-13 | Added "Optional facilities" entry — initially locked canonical 7-item facility list (AC, wifi, furniture, parking, kitchen, terrace/yard, washing machine). `has_bunk_beds` reaffirmed as separate from the facilities group. | — |
+| 2026-05-13 | Amended "Optional facilities" entry — list expanded to **9** items, adding `has_living_room` (סלון) and `has_gas_cooking` (כיריים גז) back per DECISIONS_LOG 2026-05-13 "Listing optional facilities: expanded to 9 items". Also reverted the brief "no `has_living_room` boolean" note in "Bedrooms vs rooms" entry. | — |
+| 2026-05-13 | Renamed "Optional facilities" → "Facilities" and expanded to **10** items — `has_bunk_beds` joins the list as a required-answer item (no implicit default at the form layer) per DECISIONS_LOG 2026-05-13 "Facilities list amendment: bunk beds joins". | — |
+| 2026-05-13 | Added "owner_company / מנהל נכס" entry locking the canonical Hebrew label for the supply-side user role; updated `user_role enum` entry to reflect current enum values; marked stale `b2b_owner` / `b2c_owner` / `corporate_member` entries superseded; flagged "Manager" persona name as legacy. | — |
